@@ -1,4 +1,4 @@
-package com.example.contentfilter.Controller;
+package com.example.contentfilter.controller;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
