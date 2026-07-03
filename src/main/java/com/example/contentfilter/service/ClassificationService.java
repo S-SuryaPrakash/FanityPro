@@ -6,8 +6,10 @@ import org.springframework.stereotype.Service;
 public class ClassificationService {
 
 	public String classify(String text) {
-		text = text.toLowerCase();
-
+		if (text == null) {
+			return "neutral";
+		}
+		text = text.toLowerCase(java.util.Locale.ROOT);
 		if (text.contains("stupid")) {
 			return "abusive";
 		}
