@@ -31,14 +31,16 @@ public class ClassificationService {
 	}
 
 	private void validate(String text) {
-		if (text == null || text.trim().isEmpty()) {
-			throw new InvalidClassificationRequestException("Request body must not be empty.");
-		}
+		// if (text == null || text.trim().isEmpty()) {
+		// 	throw new InvalidClassificationRequestException("Request body must not be empty.");
+		// }
 
-		if (text.length() > MAX_TEXT_LENGTH) {
-			throw new InvalidClassificationRequestException("Text must not exceed 10,000 characters.");
-		}
-	}
+		// if (text.length() > MAX_TEXT_LENGTH) {
+		// 	throw new InvalidClassificationRequestException("Text must not exceed 10,000 characters.");
+		// }
+		if (text == null || text.isBlank()) {
+    	throw new InvalidClassificationRequestException("Text cannot be blank");
+	}}
 
 	private ClassificationResponse response(String category) {
 		double confidence = ThreadLocalRandom.current().nextDouble(0.80, 0.99);

@@ -12,7 +12,11 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(InvalidClassificationRequestException.class)
 	public ResponseEntity<ErrorResponse> handleInvalidClassificationRequest(
 			InvalidClassificationRequestException exception) {
-		ErrorResponse response = new ErrorResponse("INVALID_CLASSIFICATION_REQUEST", exception.getMessage());
-		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+		HttpStatus status = HttpStatus.BAD_REQUEST;
+		ErrorResponse response = new ErrorResponse(
+				status.value(),
+				"INVALID_CLASSIFICATION_REQUEST",
+				exception.getMessage());
+		return ResponseEntity.status(status).body(response);
 	}
 }
