@@ -1,4 +1,4 @@
 package com.example.contentfilter.dto;
 
-public record ErrorResponse(String error, String message) {
+public record ErrorResponse(int statusCode, String error, String message) {
 }
