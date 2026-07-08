@@ -9,6 +9,13 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
 
 import java.util.Iterator;
+import java.io.InputStream;
+
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
 
 @RestController
 public class UploadController {
@@ -26,10 +33,47 @@ public class UploadController {
 			throw new IllegalArgumentException("Uploaded file must not be empty");
 		}
 
+		String preview = null;
+		String filename = file.getOriginalFilename();
+		String contentType = file.getContentType();
+
+		// Only attempt to parse Excel files
+		if (filename != null && (filename.endsWith(".xlsx") || filename.endsWith(".xls")
+				|| (contentType != null && contentType.contains("spreadsheet")))) {
+			try (InputStream is = file.getInputStream(); Workbook workbook = WorkbookFactory.create(is)) {
+				Sheet sheet = workbook.getNumberOfSheets() > 0 ? workbook.getSheetAt(0) : null;
+				if (sheet != null) {
+					StringBuilder sb = new StringBuilder();
+					for (Row row : sheet) {
+						for (Cell cell : row) {
+							String cellValue = switch (cell.getCellType()) {
+								case STRING -> cell.getStringCellValue();
+								case NUMERIC -> String.valueOf(cell.getNumericCellValue());
+								case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
+								case FORMULA -> cell.getCellFormula();
+								case BLANK -> "";
+								default -> cell.toString();
+							};
+							sb.append(cellValue).append('\t');
+						}
+						sb.append('\n');
+						if (sb.length() > 2000) { // limit preview size
+							break;
+						}
+					}
+					preview = sb.length() > 2000 ? sb.substring(0, 2000) : sb.toString();
+				}
+			} catch (Exception e) {
+				// If parsing fails, include an error note in preview for debugging
+				preview = "[unreadable Excel content: " + e.getMessage() + "]";
+			}
+		}
+
 		return new UploadResponse(
-				file.getOriginalFilename(),
+				filename,
 				file.getSize(),
-				file.getContentType()
+				contentType,
+				preview
 		);
 	}
 }
