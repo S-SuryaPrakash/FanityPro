@@ -44,6 +44,8 @@ public class UploadController {
 				Sheet sheet = workbook.getNumberOfSheets() > 0 ? workbook.getSheetAt(0) : null;
 				if (sheet != null) {
 					StringBuilder sb = new StringBuilder();
+					final int previewLimit = 2000;
+					outer:
 					for (Row row : sheet) {
 						for (Cell cell : row) {
 							String cellValue = switch (cell.getCellType()) {
@@ -55,14 +57,16 @@ public class UploadController {
 								default -> cell.toString();
 							};
 							sb.append(cellValue).append('\t');
+							if (sb.length() >= previewLimit) {
+								break outer;
+							}
 						}
 						sb.append('\n');
-						if (sb.length() > 2000) { // limit preview size
+						if (sb.length() >= previewLimit) {
 							break;
 						}
 					}
-					preview = sb.length() > 2000 ? sb.substring(0, 2000) : sb.toString();
-				}
+					preview = sb.length() > previewLimit ? sb.substring(0, previewLimit) : sb.toString();
 			} catch (Exception e) {
 				// If parsing fails, return a generic note in the preview (avoid leaking internal details)
 				preview = "[unreadable Excel content]";
