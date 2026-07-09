@@ -22,30 +22,36 @@ public class UploadController {
 
 	@PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	public UploadResponse uploadFile(MultipartHttpServletRequest request) {
+		// Read the uploaded file names from the multipart request.
 		Iterator<String> fileNames = request.getFileNames();
 		if (fileNames == null || !fileNames.hasNext()) {
 			throw new IllegalArgumentException("No file part in the request");
 		}
 
+		// Use the first uploaded file for processing.
 		String firstName = fileNames.next();
 		MultipartFile file = request.getFile(firstName);
 		if (file == null || file.isEmpty()) {
 			throw new IllegalArgumentException("Uploaded file must not be empty");
 		}
 
+		// Capture basic file metadata before parsing its contents.
 		String preview = null;
 		String filename = file.getOriginalFilename();
 		String contentType = file.getContentType();
 
-		// Only attempt to parse Excel files
+		// Only attempt to parse files that look like Excel documents.
 		if (filename != null && (filename.endsWith(".xlsx") || filename.endsWith(".xls")
 				|| (contentType != null && contentType.contains("spreadsheet")))) {
 			try (InputStream is = file.getInputStream(); Workbook workbook = WorkbookFactory.create(is)) {
+				// Read the first worksheet from the workbook.
 				Sheet sheet = workbook.getNumberOfSheets() > 0 ? workbook.getSheetAt(0) : null;
 				if (sheet != null) {
 					StringBuilder sb = new StringBuilder();
+					// Convert the sheet into a simple text preview row by row.
 					for (Row row : sheet) {
 						for (Cell cell : row) {
+							// Normalize the cell value so it can be shown in a plain-text preview.
 							String cellValue = switch (cell.getCellType()) {
 								case STRING -> cell.getStringCellValue();
 								case NUMERIC -> String.valueOf(cell.getNumericCellValue());
@@ -57,14 +63,15 @@ public class UploadController {
 							sb.append(cellValue).append('\t');
 						}
 						sb.append('\n');
-						if (sb.length() > 2000) { // limit preview size
+						// Keep the preview readable and avoid returning excessive data.
+						if (sb.length() > 2000) {
 							break;
 						}
 					}
 					preview = sb.length() > 2000 ? sb.substring(0, 2000) : sb.toString();
 				}
 			} catch (Exception e) {
-				// If parsing fails, include an error note in preview for debugging
+				// If parsing fails, expose the error in the preview for easier debugging.
 				preview = "[unreadable Excel content: " + e.getMessage() + "]";
 			}
 		}
