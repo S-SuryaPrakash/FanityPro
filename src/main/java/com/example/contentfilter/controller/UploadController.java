@@ -64,8 +64,8 @@ public class UploadController {
 					preview = sb.length() > 2000 ? sb.substring(0, 2000) : sb.toString();
 				}
 			} catch (Exception e) {
-				// If parsing fails, include an error note in preview for debugging
-				preview = "[unreadable Excel content: " + e.getMessage() + "]";
+				// If parsing fails, return a generic note in the preview (avoid leaking internal details)
+				preview = "[unreadable Excel content]";
 			}
 		}
 
