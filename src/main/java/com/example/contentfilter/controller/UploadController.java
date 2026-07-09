@@ -40,7 +40,7 @@ public class UploadController {
 		String filename = file.getOriginalFilename();
 		String contentType = file.getContentType();
 
-		// Only attempt to parse files that look like Excel documents.
+		// Only attempt to parse Excel files
 		if (filename != null && (filename.endsWith(".xlsx") || filename.endsWith(".xls")
 				|| (contentType != null && contentType.contains("spreadsheet")))) {
 			try (InputStream is = file.getInputStream(); Workbook workbook = WorkbookFactory.create(is)) {
@@ -48,7 +48,6 @@ public class UploadController {
 				Sheet sheet = workbook.getNumberOfSheets() > 0 ? workbook.getSheetAt(0) : null;
 				if (sheet != null) {
 					StringBuilder sb = new StringBuilder();
-					// Convert the sheet into a simple text preview row by row.
 					for (Row row : sheet) {
 						for (Cell cell : row) {
 							// Normalize the cell value so it can be shown in a plain-text preview.
@@ -61,17 +60,18 @@ public class UploadController {
 								default -> cell.toString();
 							};
 							sb.append(cellValue).append('\t');
+							if (sb.length() >= previewLimit) {
+								break outer;
+							}
 						}
 						sb.append('\n');
-						// Keep the preview readable and avoid returning excessive data.
-						if (sb.length() > 2000) {
+						if (sb.length() > 2000) { // limit preview size
 							break;
 						}
 					}
-					preview = sb.length() > 2000 ? sb.substring(0, 2000) : sb.toString();
-				}
+					preview = sb.length() > previewLimit ? sb.substring(0, previewLimit) : sb.toString();
 			} catch (Exception e) {
-				// If parsing fails, expose the error in the preview for easier debugging.
+				// If parsing fails, include an error note in preview for debugging
 				preview = "[unreadable Excel content: " + e.getMessage() + "]";
 			}
 		}
