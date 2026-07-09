@@ -61,6 +61,9 @@ public class UploadController {
 								default -> cell.toString();
 							};
 							sb.append(cellValue).append('\t');
+							if (sb.length() >= previewLimit) {
+								break outer;
+							}
 						}
 						sb.append('\n');
 						// Keep the preview readable and avoid returning excessive data.
@@ -68,8 +71,7 @@ public class UploadController {
 							break;
 						}
 					}
-					preview = sb.length() > 2000 ? sb.substring(0, 2000) : sb.toString();
-				}
+					preview = sb.length() > previewLimit ? sb.substring(0, previewLimit) : sb.toString();
 			} catch (Exception e) {
 				// If parsing fails, expose the error in the preview for easier debugging.
 				preview = "[unreadable Excel content: " + e.getMessage() + "]";
