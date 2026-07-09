@@ -11,6 +11,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+	/**
+	 * Handle validation errors raised by the classification endpoint.
+	 * Returns a consistent `ErrorResponse` with a 400 status code.
+	 */
 	@ExceptionHandler(InvalidClassificationRequestException.class)
 	public ResponseEntity<ErrorResponse> handleInvalidClassificationRequest(
 			InvalidClassificationRequestException exception) {
@@ -18,9 +22,9 @@ public class GlobalExceptionHandler {
 		String timestamp = OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
 		ErrorResponse response = new ErrorResponse(
 				status.value(),
-					"INVALID_CLASSIFICATION_REQUEST",
-					exception.getMessage(),
-					timestamp);
+				"INVALID_CLASSIFICATION_REQUEST",
+				exception.getMessage(),
+				timestamp);
 		return ResponseEntity.status(status).body(response);
 	}
 }

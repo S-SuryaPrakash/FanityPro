@@ -48,17 +48,32 @@ public class UploadController {
 				Sheet sheet = workbook.getNumberOfSheets() > 0 ? workbook.getSheetAt(0) : null;
 				if (sheet != null) {
 					StringBuilder sb = new StringBuilder();
+					final int previewLimit = 2000; // maximum characters to include in the preview
+					// Label so we can break out of nested loops when the preview limit is reached
+					outer:
 					for (Row row : sheet) {
 						for (Cell cell : row) {
 							// Normalize the cell value so it can be shown in a plain-text preview.
-							String cellValue = switch (cell.getCellType()) {
-								case STRING -> cell.getStringCellValue();
-								case NUMERIC -> String.valueOf(cell.getNumericCellValue());
-								case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
-								case FORMULA -> cell.getCellFormula();
-								case BLANK -> "";
-								default -> cell.toString();
-							};
+							String cellValue;
+							switch (cell.getCellType()) {
+								case STRING:
+									cellValue = cell.getStringCellValue();
+									break;
+								case NUMERIC:
+									cellValue = String.valueOf(cell.getNumericCellValue());
+									break;
+								case BOOLEAN:
+									cellValue = String.valueOf(cell.getBooleanCellValue());
+									break;
+								case FORMULA:
+									cellValue = cell.getCellFormula();
+									break;
+								case BLANK:
+									cellValue = "";
+									break;
+								default:
+									cellValue = cell.toString();
+							}
 							sb.append(cellValue).append('\t');
 							if (sb.length() >= previewLimit) {
 								break outer;
@@ -70,6 +85,7 @@ public class UploadController {
 						}
 					}
 					preview = sb.length() > previewLimit ? sb.substring(0, previewLimit) : sb.toString();
+				}
 			} catch (Exception e) {
 				// If parsing fails, include an error note in preview for debugging
 				preview = "[unreadable Excel content: " + e.getMessage() + "]";
