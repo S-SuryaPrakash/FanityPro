@@ -40,9 +40,9 @@ public class UploadController {
 		String filename = file.getOriginalFilename();
 		String contentType = file.getContentType();
 
-		// Only attempt to parse files that look like Excel documents.
-		if (filename != null && (filename.endsWith(".xlsx") || filename.endsWith(".xls")
-				|| (contentType != null && contentType.contains("spreadsheet")))) {
+		// Only attempt to parse Excel files
+		if ((filename != null && (filename.endsWith(".xlsx") || filename.endsWith(".xls")))
+				|| (contentType != null && contentType.contains("spreadsheet"))) {
 			try (InputStream is = file.getInputStream(); Workbook workbook = WorkbookFactory.create(is)) {
 				// Read the first worksheet from the workbook.
 				Sheet sheet = workbook.getNumberOfSheets() > 0 ? workbook.getSheetAt(0) : null;
