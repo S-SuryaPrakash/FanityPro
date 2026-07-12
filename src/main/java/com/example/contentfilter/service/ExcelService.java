@@ -1,6 +1,9 @@
 package com.example.contentfilter.service;
 
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.StringJoiner;
 
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -13,39 +16,36 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
-public class ExcelPreviewService {
-
-	private static final int PREVIEW_LIMIT = 2_000;
+public class ExcelService {
 
 	/**
-	 * Reads the first worksheet and returns a tab-separated text preview.
+	 * Extracts each non-empty row from the first worksheet as tab-separated text.
 	 */
-	public String createPreview(MultipartFile file) {
+	public List<String> extractRows(MultipartFile file) {
 		try (InputStream inputStream = file.getInputStream();
 				Workbook workbook = WorkbookFactory.create(inputStream)) {
 			if (workbook.getNumberOfSheets() == 0) {
-				return null;
+				return List.of();
 			}
 
 			Sheet sheet = workbook.getSheetAt(0);
 			DataFormatter formatter = new DataFormatter();
 			FormulaEvaluator evaluator = workbook.getCreationHelper().createFormulaEvaluator();
-			StringBuilder preview = new StringBuilder();
+			List<String> rows = new ArrayList<>();
 
 			for (Row row : sheet) {
+				StringJoiner rowText = new StringJoiner("\t");
 				for (Cell cell : row) {
-					preview.append(formatter.formatCellValue(cell, evaluator)).append('\t');
-					if (preview.length() >= PREVIEW_LIMIT) {
-						return preview.substring(0, PREVIEW_LIMIT);
-					}
+					rowText.add(formatter.formatCellValue(cell, evaluator));
 				}
-				preview.append('\n');
-				if (preview.length() >= PREVIEW_LIMIT) {
-					return preview.substring(0, PREVIEW_LIMIT);
+
+				String extractedRow = rowText.toString().trim();
+				if (!extractedRow.isEmpty()) {
+					rows.add(extractedRow);
 				}
 			}
 
-			return preview.toString();
+			return List.copyOf(rows);
 		} catch (Exception exception) {
 			throw new IllegalArgumentException("Unable to read the uploaded Excel file", exception);
 		}
