@@ -39,6 +39,7 @@ public class UploadController {
 		// Capture basic file metadata before parsing its contents.
 		String filename = file.getOriginalFilename();
 		String contentType = file.getContentType();
+		String preview = null;
 
 		if (!isExcelFile(filename, contentType)) {
 			throw new IllegalArgumentException("Only .xls and .xlsx files are supported");
