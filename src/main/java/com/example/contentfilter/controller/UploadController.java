@@ -1,7 +1,8 @@
 package com.example.contentfilter.controller;
 
 import com.example.contentfilter.dto.UploadResponse;
-import com.example.contentfilter.service.ExcelPreviewService;
+import com.example.contentfilter.dto.RowClassificationResponse;
+import com.example.contentfilter.service.UploadClassificationService;
 
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -10,12 +11,14 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
 
 import java.util.Iterator;
+import java.util.List;
+
 @RestController
 public class UploadController {
-	private final ExcelPreviewService excelPreviewService;
+	private final UploadClassificationService uploadClassificationService;
 
-	public UploadController(ExcelPreviewService excelPreviewService) {
-		this.excelPreviewService = excelPreviewService;
+	public UploadController(UploadClassificationService uploadClassificationService) {
+		this.uploadClassificationService = uploadClassificationService;
 	}
 
 	@PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -38,17 +41,24 @@ public class UploadController {
 		String contentType = file.getContentType();
 		String preview = null;
 
-		// Only attempt to parse Excel files
-		if ((filename != null && (filename.endsWith(".xlsx") || filename.endsWith(".xls")))
-				|| (contentType != null && contentType.contains("spreadsheet"))) {
-			preview = excelPreviewService.createPreview(file);
+		if (!isExcelFile(filename, contentType)) {
+			throw new IllegalArgumentException("Only .xls and .xlsx files are supported");
 		}
+
+		List<RowClassificationResponse> results = uploadClassificationService.classifyRows(file);
 
 		return new UploadResponse(
 				filename,
 				file.getSize(),
 				contentType,
-				preview
+				results
 		);
+	}
+
+	private boolean isExcelFile(String filename, String contentType) {
+		String normalizedFilename = filename == null ? "" : filename.toLowerCase(java.util.Locale.ROOT);
+		return normalizedFilename.endsWith(".xlsx")
+				|| normalizedFilename.endsWith(".xls")
+				|| (contentType != null && contentType.contains("spreadsheet"));
 	}
 }
