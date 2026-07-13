@@ -8,11 +8,12 @@ package com.example.contentfilter.dto;
  * @param timestamp ISO-8601 timestamp of the classification
  */
 public record ClassificationResponse(String category, double confidence, String timestamp) {
-    /**
-     * Return a copy of this response with the category lower-cased.
-     * This keeps the public API consistent.
-     */
-    public ClassificationResponse categoryLower() {
-        return new ClassificationResponse(category.toLowerCase(), confidence, timestamp);
-    }
+	/**
+	 * Returns a copy with a normalized lowercase category.
+	 *
+	 * @return response containing the same metadata and a lowercase category
+	 */
+	public ClassificationResponse categoryLower() {
+		return new ClassificationResponse(category.toLowerCase(), confidence, timestamp);
+	}
 }

@@ -10,13 +10,23 @@ import com.example.contentfilter.exception.InvalidClassificationRequestException
 import org.springframework.stereotype.Service;
 
 /**
- * Classifies text using a small set of predefined keywords.
+ * Demonstration classifier that assigns categories using predefined keywords.
+ *
+ * <p>Matching is case-insensitive. Confidence values are randomly generated
+ * placeholders and do not represent probabilities from a trained model.</p>
  */
 @Service
 public class KeywordClassifier implements ClassificationService {
 
 	private static final int MAX_TEXT_LENGTH = 10_000;
 
+	/**
+	 * Classifies text as abusive, professional, or neutral.
+	 *
+	 * @param text content to inspect
+	 * @return classification category, confidence, and timestamp
+	 * @throws InvalidClassificationRequestException if text is blank or too long
+	 */
 	@Override
 	public ClassificationResponse classify(String text) {
 		validate(text);
@@ -33,6 +43,9 @@ public class KeywordClassifier implements ClassificationService {
 		return response("neutral");
 	}
 
+	/**
+	 * Enforces the input constraints shared by the keyword rules.
+	 */
 	private void validate(String text) {
 		if (text == null || text.isBlank()) {
 			throw new InvalidClassificationRequestException("Request body must not be empty.");
@@ -44,6 +57,9 @@ public class KeywordClassifier implements ClassificationService {
 		}
 	}
 
+	/**
+	 * Builds classification metadata for a selected category.
+	 */
 	private ClassificationResponse response(String category) {
 		double confidence = ThreadLocalRandom.current().nextDouble(0.80, 0.99);
 		String timestamp = OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);

@@ -15,11 +15,23 @@ import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+/**
+ * Extracts row-oriented text from Excel workbooks using Apache POI.
+ *
+ * <p>Only the first worksheet is processed. Cell values in a row are joined
+ * with tab characters so downstream classifiers receive one string per row.</p>
+ */
 @Service
 public class ExcelService {
 
 	/**
 	 * Extracts each non-empty row from the first worksheet as tab-separated text.
+	 * Formulas are evaluated and displayed cell values are preserved through
+	 * Apache POI's {@code DataFormatter}.
+	 *
+	 * @param file uploaded Excel workbook
+	 * @return immutable list containing one string per non-empty row
+	 * @throws IllegalArgumentException if the workbook cannot be opened or read
 	 */
 	public List<String> extractRows(MultipartFile file) {
 		try (InputStream inputStream = file.getInputStream();

@@ -8,12 +8,17 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+/**
+ * Translates domain validation exceptions into consistent HTTP error payloads.
+ */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
 	/**
-	 * Handle validation errors raised by the classification endpoint.
-	 * Returns a consistent `ErrorResponse` with a 400 status code.
+	 * Handles validation errors raised while classifying extracted text.
+	 *
+	 * @param exception validation failure raised by a classifier
+	 * @return structured error response with HTTP 400 status
 	 */
 	@ExceptionHandler(InvalidClassificationRequestException.class)
 	public ResponseEntity<ErrorResponse> handleInvalidClassificationRequest(

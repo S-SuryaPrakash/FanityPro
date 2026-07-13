@@ -6,6 +6,11 @@ package com.example.contentfilter.exception;
  */
 public class InvalidClassificationRequestException extends RuntimeException {
 
+	/**
+	 * Creates a validation exception with a client-facing explanation.
+	 *
+	 * @param message description of the invalid classification input
+	 */
 	public InvalidClassificationRequestException(String message) {
 		super(message);
 	}

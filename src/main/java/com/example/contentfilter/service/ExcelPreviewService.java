@@ -12,13 +12,23 @@ import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+/**
+ * Creates a bounded plain-text preview of an Excel workbook.
+ *
+ * <p>This service is retained for potential preview functionality but is not
+ * currently used by the active upload-classification workflow.</p>
+ */
 @Service
 public class ExcelPreviewService {
 
 	private static final int PREVIEW_LIMIT = 2_000;
 
 	/**
-	 * Reads the first worksheet and returns a tab-separated text preview.
+	 * Reads the first worksheet and returns at most 2,000 preview characters.
+	 *
+	 * @param file uploaded Excel workbook
+	 * @return tab-separated preview, or {@code null} when no worksheet exists
+	 * @throws IllegalArgumentException if the workbook cannot be opened or read
 	 */
 	public String createPreview(MultipartFile file) {
 		try (InputStream inputStream = file.getInputStream();
