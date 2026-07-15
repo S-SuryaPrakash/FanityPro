@@ -2,7 +2,7 @@ package com.example.contentfilter;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.ComponentScan;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 /**
  * Application entry point for the content-filtering API.
@@ -11,7 +11,7 @@ import org.springframework.context.annotation.ComponentScan;
  * services, and exception handlers.</p>
  */
 @SpringBootApplication
-@ComponentScan(basePackages = "com.example.contentfilter")
+@ConfigurationPropertiesScan
 public class ContentfilterApplication {
 
 	/**

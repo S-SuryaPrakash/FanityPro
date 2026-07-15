@@ -1,10 +1,18 @@
 package com.example.contentfilter.exception;
 
-import com.example.contentfilter.dto.ErrorResponse;
+import com.example.contentfilter.web.CorrelationIdFilter;
+import jakarta.servlet.http.HttpServletRequest;
+import java.net.URI;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Locale;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -13,6 +21,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+	private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
 	/**
 	 * Handles validation errors raised while classifying extracted text.
@@ -21,15 +30,83 @@ public class GlobalExceptionHandler {
 	 * @return structured error response with HTTP 400 status
 	 */
 	@ExceptionHandler(InvalidClassificationRequestException.class)
-	public ResponseEntity<ErrorResponse> handleInvalidClassificationRequest(
-			InvalidClassificationRequestException exception) {
-		HttpStatus status = HttpStatus.BAD_REQUEST;
-		String timestamp = OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-		ErrorResponse response = new ErrorResponse(
-				status.value(),
+	public ResponseEntity<ProblemDetail> handleInvalidClassificationRequest(
+			InvalidClassificationRequestException exception,
+			HttpServletRequest request) {
+		return problem(
+				HttpStatus.BAD_REQUEST,
 				"INVALID_CLASSIFICATION_REQUEST",
 				exception.getMessage(),
-				timestamp);
-		return ResponseEntity.status(status).body(response);
+				request);
+	}
+
+	/** Handles request and workbook validation failures. */
+	@ExceptionHandler(IllegalArgumentException.class)
+	public ResponseEntity<ProblemDetail> handleIllegalArgument(
+			IllegalArgumentException exception,
+			HttpServletRequest request) {
+		return problem(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", exception.getMessage(), request);
+	}
+
+	/** Handles uploads rejected by Spring's multipart size boundary. */
+	@ExceptionHandler(MaxUploadSizeExceededException.class)
+	public ResponseEntity<ProblemDetail> handleMaximumUploadSize(
+			MaxUploadSizeExceededException exception,
+			HttpServletRequest request) {
+		return problem(
+				HttpStatus.CONTENT_TOO_LARGE,
+				"UPLOAD_TOO_LARGE",
+				"The uploaded file exceeds the configured maximum size.",
+				request);
+	}
+
+	/** Handles malformed multipart requests without exposing parser internals. */
+	@ExceptionHandler(MultipartException.class)
+	public ResponseEntity<ProblemDetail> handleMultipart(
+			MultipartException exception,
+			HttpServletRequest request) {
+		return problem(
+				HttpStatus.BAD_REQUEST,
+				"INVALID_MULTIPART_REQUEST",
+				"The multipart request could not be processed.",
+				request);
+	}
+
+	/** Converts unexpected failures to a safe response and logs the stack trace. */
+	@ExceptionHandler(Exception.class)
+	public ResponseEntity<ProblemDetail> handleUnexpected(
+			Exception exception,
+			HttpServletRequest request) {
+		String correlationId = correlationId(request);
+		LOGGER.error("Unhandled request failure with correlation ID {}", correlationId, exception);
+		return problem(
+				HttpStatus.INTERNAL_SERVER_ERROR,
+				"INTERNAL_ERROR",
+				"An unexpected error occurred.",
+				request);
+	}
+
+	private ResponseEntity<ProblemDetail> problem(
+			HttpStatus status,
+			String errorCode,
+			String detail,
+			HttpServletRequest request) {
+		String correlationId = correlationId(request);
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
+		problem.setType(URI.create("urn:content-filter:problem:"
+				+ errorCode.toLowerCase(Locale.ROOT).replace('_', '-')));
+		problem.setTitle(status.getReasonPhrase());
+		problem.setInstance(URI.create("urn:content-filter:request:" + correlationId));
+		problem.setProperty("errorCode", errorCode);
+		problem.setProperty("correlationId", correlationId);
+		problem.setProperty(
+				"timestamp",
+				OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+		return ResponseEntity.status(status).body(problem);
+	}
+
+	private String correlationId(HttpServletRequest request) {
+		Object value = request.getAttribute(CorrelationIdFilter.REQUEST_ATTRIBUTE);
+		return value instanceof String id ? id : "unavailable";
 	}
 }
