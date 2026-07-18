@@ -16,6 +16,8 @@ import org.springframework.validation.annotation.Validated;
  * only happen after load and memory testing on the target infrastructure.</p>
  *
  * @param maxFileSize maximum accepted workbook size
+ * @param maxWorksheets maximum worksheets allowed in the uploaded workbook
+ * @param maxPhysicalRows maximum defined rows inspected in the first worksheet
  * @param maxSequences maximum non-empty sequences extracted from a workbook
  * @param maxCellsPerSequence maximum populated cells contributing to a sequence
  * @param maxSequenceLength maximum Unicode characters in one sequence
@@ -26,9 +28,21 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties("content-filter.upload")
 public record UploadLimitsProperties(
 		@NotNull DataSize maxFileSize,
+		@Min(1) int maxWorksheets,
+		@Min(1) int maxPhysicalRows,
 		@Min(1) int maxSequences,
 		@Min(1) int maxCellsPerSequence,
 		@Min(1) int maxSequenceLength,
 		@Min(1) int maxTotalTextLength,
 		@NotNull Duration maxProcessingTime) {
+
+	public UploadLimitsProperties {
+		if (maxFileSize != null && maxFileSize.toBytes() < 1) {
+			throw new IllegalArgumentException("Maximum file size must be positive.");
+		}
+		if (maxProcessingTime != null
+				&& (maxProcessingTime.isZero() || maxProcessingTime.isNegative())) {
+			throw new IllegalArgumentException("Maximum processing time must be positive.");
+		}
+	}
 }

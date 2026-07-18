@@ -3,6 +3,7 @@ package com.example.contentfilter.service;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.example.contentfilter.domain.ExtractedSequence;
 import com.example.contentfilter.dto.RowClassificationResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -34,15 +35,14 @@ public class UploadClassificationService {
 	 * @return immutable row-level classification results
 	 */
 	public List<RowClassificationResponse> classifyRows(MultipartFile file) {
-		List<String> rows = excelService.extractRows(file);
-		List<RowClassificationResponse> results = new ArrayList<>(rows.size());
+		List<ExtractedSequence> sequences = excelService.extractSequences(file);
+		List<RowClassificationResponse> results = new ArrayList<>(sequences.size());
 
-		for (int index = 0; index < rows.size(); index++) {
-			String row = rows.get(index);
+		for (ExtractedSequence sequence : sequences) {
 			results.add(new RowClassificationResponse(
-					index + 1,
-					row,
-					classificationService.classify(row)));
+					sequence.rowIndex() + 1,
+					sequence.text(),
+					classificationService.classify(sequence.text())));
 		}
 
 		return List.copyOf(results);

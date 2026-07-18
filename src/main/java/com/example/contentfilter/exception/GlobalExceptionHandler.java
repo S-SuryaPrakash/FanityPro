@@ -23,6 +23,35 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
 	private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+	/** Maps workbook validation failures to the V1 HTTP error contract. */
+	@ExceptionHandler(WorkbookProcessingException.class)
+	public ResponseEntity<ProblemDetail> handleWorkbookProcessing(
+			WorkbookProcessingException exception,
+			HttpServletRequest request) {
+		return switch (exception.reason()) {
+			case UNSUPPORTED_TYPE -> problem(
+					HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+					"UNSUPPORTED_WORKBOOK_TYPE",
+					exception.getMessage(),
+					request);
+			case LIMIT_EXCEEDED -> problem(
+					HttpStatus.CONTENT_TOO_LARGE,
+					"WORKBOOK_LIMIT_EXCEEDED",
+					exception.getMessage(),
+					request);
+			case INVALID_WORKBOOK -> problem(
+					HttpStatus.BAD_REQUEST,
+					"INVALID_WORKBOOK",
+					exception.getMessage(),
+					request);
+			case INVALID_REQUEST -> problem(
+					HttpStatus.BAD_REQUEST,
+					"INVALID_UPLOAD",
+					exception.getMessage(),
+					request);
+		};
+	}
+
 	/**
 	 * Handles validation errors raised while classifying extracted text.
 	 *

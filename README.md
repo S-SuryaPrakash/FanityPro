@@ -6,7 +6,7 @@ The current classifier is deliberately simple and keyword-based. The application
 
 ## Current capabilities
 
-- Accept `.xls` and `.xlsx` files through `POST /upload`.
+- Accept validated `.xlsx` files through the required `file` part at `POST /upload`.
 - Read the first worksheet with Apache POI.
 - Convert every non-empty row into tab-separated text.
 - Classify each extracted row as `abusive`, `professional`, or `neutral`.
@@ -42,7 +42,7 @@ UploadController
      v
 UploadClassificationService
      |
-     +--> ExcelService --> List<String> rows
+     +--> ExcelService --> List<ExtractedSequence>
      |
      +--> ClassificationService (interface)
                     |
@@ -94,8 +94,8 @@ sequenceDiagram
     Client->>Controller: POST /upload (multipart Excel file)
     Controller->>Controller: Validate file presence and type
     Controller->>Coordinator: classifyRows(file)
-    Coordinator->>Excel: extractRows(file)
-    Excel-->>Coordinator: List<String>
+    Coordinator->>Excel: extractSequences(file)
+    Excel-->>Coordinator: List<ExtractedSequence>
     loop Every non-empty row
         Coordinator->>Classifier: classify(row)
         Classifier-->>Coordinator: ClassificationResponse
@@ -110,13 +110,13 @@ sequenceDiagram
 | --- | --- |
 | `UploadController` | Accepts the multipart request, validates the uploaded file, and constructs the API response. |
 | `UploadClassificationService` | Coordinates row extraction and classification. |
-| `ExcelService` | Uses Apache POI to extract non-empty rows from the first worksheet. |
+| `ExcelService` | Validates `.xlsx` input and extracts bounded sequences with physical coordinates. |
 | `ClassificationService` | Defines the classifier contract. |
 | `KeywordClassifier` | Implements the current keyword-based classification rules. |
 | `UploadResponse` | Contains uploaded-file metadata and all row results. |
 | `RowClassificationResponse` | Associates an extracted row number and text with its classification. |
 | `ClassificationResponse` | Contains the category, confidence, and classification timestamp. |
-| `GlobalExceptionHandler` | Converts classification validation failures into structured `400 Bad Request` responses. |
+| `GlobalExceptionHandler` | Converts validation and processing failures into RFC 9457 Problem Details. |
 
 ## Excel extraction behavior
 
@@ -124,12 +124,15 @@ sequenceDiagram
 
 1. Opens the workbook from the `MultipartFile` input stream.
 2. Selects only the first worksheet.
-3. Formats cell values with Apache POI's `DataFormatter` and evaluates formulas.
+3. Formats cell values with Apache POI's `DataFormatter` and uses cached formula results without recalculation.
 4. Joins cells in the same row using a tab character (`\t`).
 5. Skips empty rows.
-6. Returns an immutable `List<String>`.
+6. Preserves zero-based sheet, physical row, and populated-column coordinates.
+7. Enforces file, time, sequence, cell, and extracted-text limits.
+8. Returns an immutable `List<ExtractedSequence>`.
 
-The reported `rowNumber` is the one-based position in the extracted non-empty row list. It is not guaranteed to be the physical Excel row number when blank rows are present.
+The reported `rowNumber` is the one-based physical Excel row number, so blank
+rows do not change the source location.
 
 The first row is not treated specially. If the workbook contains a header row, that header is also classified.
 
@@ -272,6 +275,9 @@ The current tests verify:
 - Actuator liveness and readiness probes report the application state.
 - Invalid uploads use RFC 9457 Problem Details and correlation IDs.
 - Documented V1 upload limits bind to validated configuration.
+- Excel extraction preserves physical coordinates and cached formula values.
+- Unsupported metadata/content and configured workbook limits are rejected.
+- The controller requires the exact multipart part name and returns physical row numbers.
 
 ## Project structure
 
@@ -280,12 +286,14 @@ src/
 |-- main/java/com/example/contentfilter/
 |   |-- config/           Validated external configuration
 |   |-- controller/       HTTP endpoints
+|   |-- domain/           Technology-neutral workflow records
 |   |-- dto/              Request and response records
 |   |-- exception/        Application exceptions and API error handling
 |   |-- service/          Excel processing, workflow coordination, classifiers
 |   `-- web/              Cross-cutting HTTP concerns such as correlation IDs
 `-- test/java/com/example/contentfilter/
-    `-- service/          Classifier tests
+    |-- controller/       Multipart HTTP integration tests
+    `-- service/          Excel and classifier unit tests
 ```
 
 Java package names are lowercase. The correct service package is `com.example.contentfilter.service`.
@@ -296,8 +304,6 @@ Java package names are lowercase. The correct service package is `com.example.co
 - Header rows are not automatically skipped.
 - The keyword classifier is a demonstration implementation, not a trained content-safety model.
 - Confidence values are randomly generated.
-- Upload validation exceptions such as an unsupported file type are not yet handled by a dedicated structured exception handler.
-- `ExcelPreviewService` remains in the codebase but is not used by the active upload workflow.
 - `ClassificationRequest` and `UploadRequest` are currently not used by an endpoint.
 - `ClassificationResponse.categoryLower()` is currently unnecessary because `KeywordClassifier` already returns lowercase categories.
 
@@ -305,13 +311,11 @@ These items are documented explicitly so future work can distinguish active beha
 
 ## Suggested next steps
 
-1. Remove or reconnect unused preview and request DTO code.
-2. Add controller and multipart upload integration tests.
-3. Return structured errors for every upload validation and workbook parsing failure.
-4. Decide whether the first row should be treated as a header.
-5. Preserve the physical worksheet row number during extraction.
-6. Add a production classifier implementation behind `ClassificationService`.
-7. Replace random confidence values with meaningful scores from the selected classifier.
+1. Remove or connect the unused request DTOs.
+2. Decide whether the first row should be treated as a header.
+3. Introduce the stable batch-first classification result contract.
+4. Add a production classifier implementation behind `ClassificationService`.
+5. Replace random confidence values with meaningful scores from the selected classifier.
 
 # Product roadmap
 
@@ -424,6 +428,8 @@ limits:
 | Accepted format | `.xlsx` only |
 | Uploaded file size | 5 MiB |
 | Worksheets processed | First worksheet only |
+| Worksheets allowed | 10 per workbook |
+| Physical rows inspected | 10,000 in the first worksheet |
 | Non-empty sequences | 2,000 per workbook |
 | Populated cells | 100 per sequence |
 | Sequence length | 4,000 Unicode characters |
@@ -541,7 +547,8 @@ Uploaded workbooks are untrusted input. V1 uses defense in depth:
   uncompressed-entry and extracted-text limits.
 - Do not execute macros, follow external workbook links, or fetch remote
   content. Preserve formulas in the output and define whether classification
-  uses the cached displayed value or a locally evaluated value.
+  uses the cached displayed value or a locally evaluated value. V1 uses the
+  cached displayed value and does not recalculate formulas during extraction.
 - Process files with restricted CPU, memory, temporary storage, filesystem
   permissions, and execution time. Delete temporary material in a `finally`
   path.
@@ -670,7 +677,7 @@ contracts that every classifier and report implementation will reuse.
 
 - [x] Module 1: baseline dependencies, validated limits, Problem Details,
   correlation IDs, Actuator probes, graceful shutdown, CI, and operational tests.
-- [ ] Module 2: secure `.xlsx` validation and bounded coordinate-aware sequence
+- [x] Module 2: secure `.xlsx` validation and bounded coordinate-aware sequence
   extraction.
 - [ ] Module 3: stable classification domain contracts and test adapter.
 - [ ] Module 4 onward: model evaluation, FastAPI, report generation, hardening,
@@ -776,13 +783,14 @@ professional-language rules.
 
 ## 2. Preserve Excel sequence coordinates
 
-The existing `ExcelService` returns `List<String>`, which is insufficient for
-locating and colouring the source sequence in the output workbook.
+`ExcelService` now returns coordinate-aware sequences rather than `List<String>`,
+so later report generation can locate and colour the source cells.
 
-Introduce a coordinate-aware record:
+The implemented coordinate-aware record is:
 
 ```java
 public record ExtractedSequence(
+        String sequenceId,
         int sheetIndex,
         int rowIndex,
         List<Integer> sourceColumnIndexes,
@@ -790,7 +798,7 @@ public record ExtractedSequence(
 }
 ```
 
-Refactor extraction to return:
+Extraction returns:
 
 ```java
 List<ExtractedSequence> extractSequences(MultipartFile file);

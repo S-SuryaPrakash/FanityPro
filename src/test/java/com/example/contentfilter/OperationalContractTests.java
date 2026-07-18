@@ -51,16 +51,18 @@ class OperationalContractTests {
 				.andExpect(status().isBadRequest())
 				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
 				.andExpect(header().string(CorrelationIdFilter.HEADER_NAME, correlationId))
-				.andExpect(jsonPath("$.type").value("urn:content-filter:problem:invalid-request"))
+				.andExpect(jsonPath("$.type").value("urn:content-filter:problem:invalid-upload"))
 				.andExpect(jsonPath("$.title").value("Bad Request"))
 				.andExpect(jsonPath("$.status").value(400))
-				.andExpect(jsonPath("$.errorCode").value("INVALID_REQUEST"))
+				.andExpect(jsonPath("$.errorCode").value("INVALID_UPLOAD"))
 				.andExpect(jsonPath("$.correlationId").value(correlationId));
 	}
 
 	@Test
 	void bindsDocumentedUploadLimits() {
 		assertEquals(DataSize.ofMegabytes(5), uploadLimits.maxFileSize());
+		assertEquals(10, uploadLimits.maxWorksheets());
+		assertEquals(10_000, uploadLimits.maxPhysicalRows());
 		assertEquals(2_000, uploadLimits.maxSequences());
 		assertEquals(100, uploadLimits.maxCellsPerSequence());
 		assertEquals(4_000, uploadLimits.maxSequenceLength());
