@@ -1,9 +1,11 @@
 package com.example.contentfilter.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.example.contentfilter.config.UploadLimitsProperties;
+import com.example.contentfilter.domain.ConversationColumnMapping;
 import com.example.contentfilter.domain.ExtractedSequence;
 import com.example.contentfilter.exception.WorkbookProcessingException;
 import com.example.contentfilter.exception.WorkbookProcessingException.Reason;
@@ -68,6 +70,43 @@ class ExcelServiceTests {
 				.getFirst();
 
 		assertEquals("2", sequence.text());
+	}
+
+	@Test
+	void mapsOnlyMessageTextAndRetainsConversationContext() throws IOException {
+		byte[] workbook = workbook(book -> {
+			XSSFSheet sheet = book.createSheet("Input");
+			XSSFRow header = sheet.createRow(0);
+			header.createCell(0).setCellValue("conversation_id");
+			header.createCell(1).setCellValue("speaker_role");
+			header.createCell(2).setCellValue("text");
+			header.createCell(3).setCellValue("language");
+			XSSFRow message = sheet.createRow(1);
+			message.createCell(0).setCellValue("conversation-42");
+			message.createCell(1).setCellValue("agent");
+			message.createCell(2).setCellValue("Please contact support");
+			message.createCell(3).setCellValue("en");
+		});
+
+		ExtractedSequence sequence = service(defaultLimits())
+				.extractConversationSequences(upload(workbook), ConversationColumnMapping.standard())
+				.getFirst();
+
+		assertEquals("Please contact support", sequence.text());
+		assertEquals(List.of(2), sequence.sourceColumnIndexes());
+		assertEquals("conversation-42", sequence.context().conversationId());
+		assertEquals("agent", sequence.context().speakerRole());
+		assertEquals("en", sequence.context().language());
+		assertNull(sequence.context().messageId());
+	}
+
+	@Test
+	void rejectsMappedWorkbookWithoutTheRequiredTextHeader() throws IOException {
+		byte[] workbook = workbook(book ->
+				book.createSheet("Input").createRow(0).createCell(0).setCellValue("message"));
+
+		assertReason(Reason.INVALID_WORKBOOK, () -> service(defaultLimits())
+				.extractConversationSequences(upload(workbook), ConversationColumnMapping.standard()));
 	}
 
 	@Test

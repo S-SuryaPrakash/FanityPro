@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
  */
 class KeywordClassifierTests {
 
-	private final ClassificationService classifier = new KeywordClassifier();
+	private final LegacyClassificationService classifier = new KeywordClassifier();
 
 	/**
 	 * Verifies every category currently supported by the keyword strategy.

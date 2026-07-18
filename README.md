@@ -2,7 +2,17 @@
 
 Content Filter is a Spring Boot application that accepts an Excel workbook, extracts the non-empty rows from its first worksheet, classifies the text in each row, and returns structured JSON results.
 
-The current classifier is deliberately simple and keyword-based. The application uses a `ClassificationService` interface so that another implementation, such as an AI or machine-learning classifier, can be introduced later without changing the upload workflow.
+The current endpoint classifier is deliberately simple and keyword-based. Its
+single-text contract is retained temporarily through `LegacyClassificationService`.
+The production path now uses a separate batch-first `ClassificationService`, so
+the future model provider can change without changing policy or Excel reporting.
+
+The target product is a vendor-neutral **conversation risk review platform** for
+customer-support, contact-centre, compliance, and AI-operations teams. It will
+analyse exported human and AI-assisted conversations, prioritise potentially
+risky messages for human review, and return an auditable annotated workbook.
+The current keyword categories remain prototype behavior and are not the final
+production taxonomy.
 
 ## Current capabilities
 
@@ -21,9 +31,9 @@ flowchart TD
     UC --> UCS[UploadClassificationService]
     UCS --> ES[ExcelService]
     ES --> POI[Apache POI]
-    POI --> Rows[List of row strings]
+    POI --> Rows[List of ExtractedSequence records]
     Rows --> UCS
-    UCS --> CS[ClassificationService interface]
+    UCS --> CS[LegacyClassificationService compatibility interface]
     CS --> KC[KeywordClassifier]
     KC --> CR[ClassificationResponse]
     CR --> UCS
@@ -44,7 +54,7 @@ UploadClassificationService
      |
      +--> ExcelService --> List<ExtractedSequence>
      |
-     +--> ClassificationService (interface)
+     +--> LegacyClassificationService (compatibility interface)
                     |
                     v
              KeywordClassifier
@@ -57,7 +67,7 @@ UploadResponse containing row results
 
 ```mermaid
 classDiagram
-    class ClassificationService {
+    class LegacyClassificationService {
         <<interface>>
         +classify(String text) ClassificationResponse
     }
@@ -68,16 +78,20 @@ classDiagram
 
     class UploadClassificationService {
         -ExcelService excelService
-        -ClassificationService classificationService
+        -LegacyClassificationService classificationService
         +classifyRows(MultipartFile file) List~RowClassificationResponse~
     }
 
-    KeywordClassifier ..|> ClassificationService
-    UploadClassificationService --> ClassificationService
+    KeywordClassifier ..|> LegacyClassificationService
+    UploadClassificationService --> LegacyClassificationService
     UploadClassificationService --> ExcelService
 ```
 
-`UploadClassificationService` depends on the interface rather than on `KeywordClassifier`. Spring discovers `KeywordClassifier` through `@Service` and injects it as the current `ClassificationService` implementation.
+`UploadClassificationService` depends on the compatibility interface rather
+than directly on `KeywordClassifier`. Spring discovers `KeywordClassifier`
+through `@Service` and injects it as the current `LegacyClassificationService`
+implementation. New production workflow code uses the batch-first
+`ClassificationService` described later in this document.
 
 If more classifier implementations are added, select the desired implementation with `@Primary`, `@Qualifier`, or configuration-based bean creation.
 
@@ -89,7 +103,7 @@ sequenceDiagram
     participant Controller as UploadController
     participant Coordinator as UploadClassificationService
     participant Excel as ExcelService
-    participant Classifier as ClassificationService
+    participant Classifier as LegacyClassificationService
 
     Client->>Controller: POST /upload (multipart Excel file)
     Controller->>Controller: Validate file presence and type
@@ -111,7 +125,11 @@ sequenceDiagram
 | `UploadController` | Accepts the multipart request, validates the uploaded file, and constructs the API response. |
 | `UploadClassificationService` | Coordinates row extraction and classification. |
 | `ExcelService` | Validates `.xlsx` input and extracts bounded sequences with physical coordinates. |
-| `ClassificationService` | Defines the classifier contract. |
+| `LegacyClassificationService` | Preserves the current single-text prototype endpoint during migration. |
+| `ClassificationService` | Defines the new batch-first risk-classification contract. |
+| `RiskClassificationService` | Correlates model responses by sequence ID and applies policy. |
+| `ConversationRiskWorkflowService` | Coordinates mapped extraction and batch risk decisions. |
+| `VersionedRiskPolicy` | Converts model scores into a category, severity, and review decision. |
 | `KeywordClassifier` | Implements the current keyword-based classification rules. |
 | `UploadResponse` | Contains uploaded-file metadata and all row results. |
 | `RowClassificationResponse` | Associates an extracted row number and text with its classification. |
@@ -278,6 +296,9 @@ The current tests verify:
 - Excel extraction preserves physical coordinates and cached formula values.
 - Unsupported metadata/content and configured workbook limits are rejected.
 - The controller requires the exact multipart part name and returns physical row numbers.
+- Mapped extraction separates message text from conversation metadata.
+- Batch results are correlated by sequence ID rather than provider order.
+- Versioned policy handles thresholds, conflicts, uncertainty, and truncation.
 
 ## Project structure
 
@@ -301,7 +322,7 @@ Java package names are lowercase. The correct service package is `com.example.co
 ## Current limitations and cleanup candidates
 
 - Only the first worksheet is processed.
-- Header rows are not automatically skipped.
+- Simple row mode does not automatically skip a header; mapped conversation mode does.
 - The keyword classifier is a demonstration implementation, not a trained content-safety model.
 - Confidence values are randomly generated.
 - `ClassificationRequest` and `UploadRequest` are currently not used by an endpoint.
@@ -312,10 +333,91 @@ These items are documented explicitly so future work can distinguish active beha
 ## Suggested next steps
 
 1. Remove or connect the unused request DTOs.
-2. Decide whether the first row should be treated as a header.
-3. Introduce the stable batch-first classification result contract.
-4. Add a production classifier implementation behind `ClassificationService`.
-5. Replace random confidence values with meaningful scores from the selected classifier.
+2. Add header detection and explicit conversation-column mapping.
+3. Introduce the stable batch-first classification and policy contracts.
+4. Add a deterministic adapter that exercises the production risk taxonomy.
+5. Build the evaluation dataset before selecting and integrating a model.
+
+# Real-world product workflow
+
+## Primary use case
+
+A quality or compliance team exports customer, agent, and AI-chatbot messages
+from its support platform into an `.xlsx` workbook. The application analyses
+each message, preserves its source location, applies a versioned risk policy,
+and produces a review queue rather than making an automatic disciplinary or
+blocking decision.
+
+```text
+Support/chat platform export
+            |
+            v
+       Excel workbook
+            |
+            v
+Secure extraction and source coordinates
+            |
+            v
+Multi-label content-risk model
+            |
+            v
+Versioned threshold and precedence policy
+            |
+     +------+------+
+     |             |
+     v             v
+No automated   Human review
+policy flag      required
+     |             |
+     +------+------+
+            v
+Annotated workbook, review queue and audit metadata
+```
+
+The model result is decision support. A flag means that a configured risk may
+be present; it does not prove misconduct. Severe, uncertain, conflicting, or
+truncated results must be reviewable by an authorised person.
+
+## V1 workbook contract
+
+The first usable release keeps a simple mode in which each non-empty row is one
+complete message. The production workbook format will additionally support an
+explicit text-column mapping and these optional context columns:
+
+| Column | Required | Purpose |
+| --- | --- | --- |
+| `text` | Yes | Complete message sent to the classifier |
+| `conversation_id` | No | Groups turns belonging to one interaction |
+| `message_id` | No | Correlates one source message with its result |
+| `speaker_role` | No | `customer`, `agent`, `ai`, or `system` |
+| `timestamp` | No | Original message time |
+| `language` | No | Known language; V1 supports English |
+| `channel` | No | Chat, email, chatbot, forum, or another source |
+
+Column mapping prevents identifiers and timestamps from being accidentally sent
+to the language model as message text. Module 2 provides the secure low-level
+coordinates; the conversation schema will be introduced before production
+model integration.
+
+## Product boundaries
+
+V1 will:
+
+- screen complete messages for configured communication risks;
+- preserve multi-label scores while selecting one primary display category;
+- assign severity and decide whether human review is required;
+- retain model revision and policy version for reproducibility;
+- use `NO_AUTOMATED_FLAG` instead of claiming that content is definitively safe;
+- avoid permanently retaining uploaded conversation content.
+
+V1 will not:
+
+- automatically punish employees, ban customers, or make employment decisions;
+- claim that low-scoring content is guaranteed safe;
+- infer intent, professionalism, or employee performance from toxicity alone;
+- send conversation text to a hosted third-party model service;
+- identify individual harmful word spans unless a later evidence-span detector
+  is explicitly added and evaluated.
 
 # Product roadmap
 
@@ -335,79 +437,96 @@ Model image:         contentfilter-model:1.0.0
 
 ## Version goals
 
-### V1 — Excel profanity classification
+### V1 — Batch conversation-risk review
 
-Users upload an Excel workbook. The application extracts its text, sends it to
-a content-classification model, assigns categories, applies category-specific
-colours, and returns an annotated Excel workbook.
+Users upload an exported Excel workbook containing human or AI-assisted support
+messages. The application validates and extracts the messages, obtains
+multi-label risk scores, applies a versioned decision policy, and returns an
+annotated workbook containing the original content, a review queue, a summary,
+and audit metadata.
 
-Initial colour examples:
+Initial display policy:
 
-| Category | Colour |
-| --- | --- |
-| Abusive | Red |
-| Threat | Dark red |
-| Insult | Orange |
-| Obscene | Purple |
-| Professional | Green |
-| Neutral | Light grey |
-| Manual review | Yellow |
+| Primary category | Colour | Meaning |
+| --- | --- | --- |
+| Threat | Dark red | Potential violence or threat; priority review |
+| Hate or identity attack | Red | Potential identity-targeted harmful content |
+| Harassment or insult | Orange | Potential targeted abuse or demeaning language |
+| Obscene or profane | Purple | Potential obscene or profane language |
+| General toxicity | Amber | Harmful signal without a stronger specific category |
+| Manual review | Yellow | Uncertain, conflicting, or truncated result |
+| No automated flag | Light grey | No configured threshold was exceeded |
 
-### V2 — Authentication and usage dashboards
+Colour is an accessibility aid, not the only result representation. Every row
+also contains category, severity, confidence, review status, model revision,
+and policy version. `No automated flag` does not mean guaranteed safe.
 
-- User registration and login.
-- Authentication and authorization through Spring Security.
-- Upload counts and user scorecards.
-- Upload trends displayed through bar charts.
-- Category-distribution charts showing how much content was assigned to each
-  classification.
-- PostgreSQL persistence for users, uploads, and aggregate results.
+### V2 — Secure review and case management
 
-### V3 — Enterprise webhook integration
+- User registration, login, authentication, and role-based authorization.
+- Analyst review queue with assignment and case status.
+- Confirm, overturn, escalate, or mark a policy exception.
+- Reviewer notes, audit history, and pseudonymised identities where appropriate.
+- Operational dashboards for category/severity trends, review turnaround,
+  confirmation rate, override rate, and model-quality drift.
+- PostgreSQL persistence for users, cases, decisions, policy versions, and
+  privacy-safe aggregates.
 
-- External systems submit chat or conversation content through a secured API.
-- The service analyzes submitted content and sends results to a registered
-  callback URL.
-- Webhook payloads use HMAC signatures, idempotency keys, retry policies, and
-  delivery audit records.
-- A message queue can be introduced when asynchronous volume requires it.
+### V3 — Real-time API and webhook integrations
 
-### V4 — Multilingual classification
+- External support systems submit individual or batched human/AI messages
+  through a secured, idempotent API.
+- Return bounded synchronous decisions or create asynchronous jobs for larger
+  conversations.
+- Send signed webhook notifications for severe or review-required results.
+- Use HMAC signatures, idempotency keys, retry policies, delivery audit records,
+  and an outbox/message queue when asynchronous volume requires it.
 
-- Extend the initially English-only service to languages such as Spanish and
-  German.
-- Introduce language detection and a multilingual classification model.
-- Evaluate category thresholds independently for each supported language.
-- Retain the original language in the returned workbook and API results.
+### V4 — Evaluated multilingual support
 
-### V5 — User-configurable conversation rules
+- Extend the initially English-only service to Spanish and German.
+- Introduce language detection and suitable multilingual models.
+- Build representative evaluation data with native-language reviewers.
+- Evaluate thresholds, false positives, and false negatives independently for
+  each supported language and deployment domain.
+- Retain the original language in workbook and API results.
 
-- Users configure which types of conversation should be flagged.
-- Rules may cover casual language, jokes, organization-specific terminology,
-  category thresholds, and communication policies.
-- Store versioned rules in PostgreSQL and apply them after model inference.
-- Start with a small custom rule evaluator; introduce a dedicated rules engine
-  only if rule complexity makes it necessary.
+### V5 — Versioned organisation-specific policies
+
+- Administrators configure categories, thresholds, precedence, review rules,
+  approved terminology, and organisation-specific exceptions.
+- Apply versioned policies after model inference and record the policy version
+  on every result.
+- Separate communication-risk rules from optional tone/coaching signals.
+- Start with a small deterministic policy evaluator and introduce a dedicated
+  rules engine only when rule complexity justifies it.
 
 # Target architecture
 
 ```mermaid
 flowchart TD
-    UI[React web application] --> API[Spring Boot API :8080]
-    API --> Excel[Apache POI Excel processing]
-    API --> Model[FastAPI model service :8000]
+    Sources[Human and AI conversation exports] --> UI[React review application]
+    UI --> API[Spring Boot API :8080]
+    API --> Excel[Secure Apache POI extraction]
+    Excel --> Context[Messages plus source coordinates and context]
+    Context --> Model[FastAPI model service :8000]
     Model --> HF[Hugging Face / PyTorch model]
-    API --> Output[Annotated Excel workbook]
+    Model --> Policy[Versioned decision policy]
+    Policy --> Review[Review decision and audit metadata]
+    Review --> Output[Annotated workbook and review queue]
     Output --> UI
 
-    API -. V2 onward .-> DB[(PostgreSQL)]
+    UI -. V2 reviewer decisions .-> DB[(PostgreSQL)]
+    API -. V2 onward .-> DB
     API -. V3 onward .-> Queue[Optional message queue]
-    API -. V3 onward .-> External[Enterprise webhook consumers]
+    API -. V3 onward .-> External[Support systems and webhook consumers]
 ```
 
 The Spring Boot service owns the public API and business workflow. The Python
-service owns model loading and inference. Only Spring Boot should be exposed to
-end users; it calls FastAPI through the internal container network.
+service owns model loading and inference. The deterministic policy layer turns
+model scores into review decisions. Only Spring Boot is exposed to end users;
+it calls FastAPI through the internal container network. Human reviewers remain
+responsible for confirming or overturning flagged results.
 
 # Production V1 baseline
 
@@ -467,31 +586,48 @@ payloads the application's domain model. The core workflow should use these
 technology-neutral records:
 
 ```java
+public record ConversationContext(
+        String conversationId,
+        String messageId,
+        String speakerRole,
+        String timestamp,
+        String language,
+        String channel) {
+}
+
 public record ExtractedSequence(
         String sequenceId,
         int sheetIndex,
         int rowIndex,
         List<Integer> sourceColumnIndexes,
-        String text) {
+        String text,
+        ConversationContext context) {
 }
 
 public record ClassificationResult(
         String sequenceId,
-        ClassificationCategory primaryCategory,
+        RiskCategory primaryCategory,
+        RiskSeverity severity,
         double confidence,
-        Map<ClassificationCategory, Double> scores,
+        Map<RiskCategory, Double> scores,
         boolean manualReviewRequired,
+        String reviewReason,
         String modelId,
         String modelRevision,
         String policyVersion) {
 }
 ```
 
+The timestamp remains the displayed source value during extraction so the
+application does not silently reinterpret an ambiguous spreadsheet date.
 `sequenceId` provides explicit request/response correlation; model response
-order alone is not trusted. `scores` preserves multi-label model information
-even though the workbook displays one primary category. Model revision and
-policy version make a result reproducible and auditable. Use an enum for
-categories inside Java and stable lowercase strings at the JSON boundary.
+order alone is not trusted. `ConversationContext` retains optional operational
+context without mixing identifiers or timestamps into the text sent for
+classification. `scores` preserves multi-label model information even though
+the workbook displays one primary category. `severity` and `reviewReason`
+explain prioritisation. Model revision and policy version make a result
+reproducible and auditable. Use enums inside Java and stable lowercase strings
+at the JSON boundary.
 
 The classifier port should be batch-first:
 
@@ -506,22 +642,28 @@ not make one network call per row.
 
 ## Classification policy
 
-Profanity, toxicity, hate speech, threats, obscenity, and professionalism are
-different concepts. V1 must publish a versioned decision policy rather than
-present a model score as an unquestionable fact.
+Profanity, toxicity, hate speech, threats, obscenity, and tone are different
+concepts. V1 publishes a versioned decision policy rather than presenting a
+model score as an unquestionable fact.
 
 Initial output categories:
 
 ```text
-THREAT, ABUSIVE, INSULT, OBSCENE, PROFESSIONAL, NEUTRAL, MANUAL_REVIEW
+THREAT
+HATE_OR_IDENTITY_ATTACK
+HARASSMENT_OR_INSULT
+OBSCENE_OR_PROFANE
+GENERAL_TOXICITY
+NO_AUTOMATED_FLAG
+MANUAL_REVIEW
 ```
 
 The model may return several scores. A deterministic policy selects the primary
 category using configured per-label thresholds and precedence. Low confidence,
 conflicting labels, truncated input, or model uncertainty must produce
-`MANUAL_REVIEW`. "Professional" remains a separate rules-based decision after
-the harmful-content checks; a toxicity model alone cannot establish that text
-is professional.
+`MANUAL_REVIEW`. `NO_AUTOMATED_FLAG` only means that no configured risk threshold
+was exceeded. Professionalism or tone coaching is a separate optional signal
+and must never be inferred from the absence of toxicity.
 
 Before selecting a production model, create a versioned evaluation dataset that
 represents the intended workplace/chat domain. Record per-category precision,
@@ -659,11 +801,11 @@ Implement V1 as small vertical slices, with each slice tested before the next:
 ```text
 0. Baseline dependencies, configuration, Problem Details, Actuator, CI
 1. Upload validation and bounded coordinate-aware `.xlsx` extraction
-2. Classification domain contracts and deterministic keyword test adapter
-3. Versioned model evaluation dataset and model-selection report
-4. FastAPI batch inference with pinned model and readiness
+2. Conversation-column mapping and stable classification domain contracts
+3. Deterministic policy/test adapter and versioned evaluation dataset
+4. Model-selection report and FastAPI batch inference with a pinned model
 5. Resilient Spring-to-FastAPI adapter and contract tests
-6. Annotated workbook generation and golden workbook tests
+6. Annotated workbook, review queue, summary, and golden workbook tests
 7. Versioned download endpoint and end-to-end tests
 8. Containers, Compose, resource limits, telemetry, and load/security tests
 9. Controlled V1 release, runbook, backup/rollback procedure
@@ -679,7 +821,8 @@ contracts that every classifier and report implementation will reuse.
   correlation IDs, Actuator probes, graceful shutdown, CI, and operational tests.
 - [x] Module 2: secure `.xlsx` validation and bounded coordinate-aware sequence
   extraction.
-- [ ] Module 3: stable classification domain contracts and test adapter.
+- [x] Module 3: conversation-column mapping, stable classification contracts,
+  versioned decision policy, and deterministic test adapter.
 - [ ] Module 4 onward: model evaluation, FastAPI, report generation, hardening,
   and release.
 
@@ -693,6 +836,7 @@ contracts that every classifier and report implementation will reuse.
 | Machine learning | Hugging Face Transformers, PyTorch | V1 |
 | Initial model | Toxicity classifier such as `unitary/toxic-bert` or Detoxify | V1 |
 | Java-to-model communication | HTTP/JSON using Spring `RestClient` | V1 |
+| Decision policy | Versioned deterministic Java configuration | V1 |
 | Frontend | React with TypeScript | V1 |
 | Java testing | JUnit, Spring Boot Test, Mockito/WireMock | V1 |
 | Python testing | pytest, FastAPI TestClient | V1 |
@@ -718,11 +862,17 @@ The recommended first release will:
 
 - Accept `.xlsx` files initially.
 - Process the first worksheet.
-- Treat each non-empty extracted row as one complete sentence or text sequence.
+- Support a simple row-as-message mode and explicit mapping of the text column.
+- Accept optional conversation ID, message ID, speaker role, timestamp, language,
+  and channel columns without treating those values as message text.
+- Treat each mapped non-empty message as one complete text sequence.
 - Preserve the original workbook content.
-- Apply one classification and colour to the complete source sequence.
-- Add category and confidence information.
-- Add a classification legend worksheet.
+- Preserve all model scores and apply a versioned policy that selects the primary
+  risk category, severity, and review status.
+- Apply the primary-category colour to the complete source sequence.
+- Add primary category, severity, confidence, review status, review reason,
+  model revision, and policy version columns.
+- Add Review Queue, Summary, and Legend worksheets.
 - Return the modified workbook as a download.
 - Enforce upload, row, cell, text-length, and model-batch limits.
 - Avoid permanently storing uploaded content.
@@ -730,56 +880,60 @@ The recommended first release will:
 ### Sequence-level classification decision
 
 V1 deliberately performs sequence classification, not individual-word
-classification. Each non-empty Excel row represents one sentence, message, or
-conversation entry. If a row contains multiple populated cells, their displayed
-values are joined with tab characters, matching the current `ExcelService`
-behavior, and the resulting string is sent to the classifier once.
+classification. In simple mode, each non-empty Excel row represents one
+sentence, message, or conversation entry. In mapped mode, only the configured
+text column is classified; identifiers and contextual columns remain attached
+as metadata. The current tab-joined row extraction remains a prototype-compatible
+fallback, not the production default for structured conversation exports.
 
 The frozen V1 classification unit is:
 
 ```text
-One non-empty Excel row
+One mapped message or non-empty row
           |
           v
 One complete sentence/text sequence
           |
           v
-One category and confidence score
+Multi-label model scores
           |
           v
-Colour the complete source sequence
+Versioned policy decision
+          |
+          v
+Primary risk + severity + review status
+          |
+          v
+Annotate the complete source sequence
 ```
 
-All text-bearing cells belonging to that sequence will receive the same category
-colour. The generated workbook will also contain explicit category and
-confidence values, so colour is not the only way to interpret the result.
+All text-bearing cells belonging to that sequence will receive the same primary
+category colour. The generated workbook also contains explicit scores, severity,
+and review information, so colour is never the only way to interpret the result.
 
 Individual offensive words will not be identified or styled separately in V1.
 That would require a profanity dictionary, token-classification model, or other
 span-detection mechanism in addition to the sequence classifier and can be
 considered in a later release.
 
-### Professional classification
+### Risk decision and tone separation
 
-Toxicity models generally produce labels such as toxicity, insult, threat,
-obscenity, severe toxicity, and identity hate. They do not necessarily detect
-professional language.
-
-The initial decision policy should be:
+The model returns scores; it does not make the final operational decision. A
+deterministic, versioned policy applies per-label thresholds and precedence:
 
 ```text
-Toxicity score exceeds configured threshold
-    -> Use the strongest toxicity category
-
-Otherwise professional keyword/pattern matches
-    -> Professional
-
-Otherwise
-    -> Neutral
+Model scores
+    -> Apply versioned thresholds and category precedence
+    -> Select primary risk and severity
+    -> Route severe, uncertain, conflicting, or truncated results to review
+    -> Use NO_AUTOMATED_FLAG when no configured threshold is exceeded
 ```
 
-The existing `KeywordClassifier` can continue supplying the initial
-professional-language rules.
+`NO_AUTOMATED_FLAG` is not a guarantee that a message is safe. Professionalism,
+formality, and coaching signals solve a different problem and may be added later
+as a separate, clearly labelled result. `DeterministicRiskModel` supplies fixed
+development scores until the evaluated model integration is ready. The legacy
+`KeywordClassifier` categories are not the production risk taxonomy.
 
 ## 2. Preserve Excel sequence coordinates
 
@@ -794,7 +948,8 @@ public record ExtractedSequence(
         int sheetIndex,
         int rowIndex,
         List<Integer> sourceColumnIndexes,
-        String text) {
+        String text,
+        ConversationContext context) {
 }
 ```
 
@@ -803,6 +958,19 @@ Extraction returns:
 ```java
 List<ExtractedSequence> extractSequences(MultipartFile file);
 ```
+
+Module 3 also provides explicit header-based conversation extraction:
+
+```java
+List<ExtractedSequence> extractConversationSequences(
+        MultipartFile file,
+        ConversationColumnMapping mapping);
+```
+
+Mapped extraction skips the configured header row, classifies only the text
+column, and stores optional IDs, role, timestamp, language, and channel in
+`ConversationContext`. The current endpoint continues using simple mode until
+the versioned file-classification endpoint is added.
 
 Use physical zero-based sheet, row, and column coordinates internally. The
 source-column list records every populated cell that contributed to the joined
@@ -833,11 +1001,15 @@ Implementation tasks:
 1. Create a Python virtual environment.
 2. Install FastAPI, Uvicorn, Transformers, PyTorch, and pytest.
 3. Load the chosen Hugging Face model.
-4. Test safe, abusive, insulting, obscene, and threatening examples.
-5. Test representative content taken from the intended workbook domain.
-6. Record expected and actual predictions in a small evaluation dataset.
-7. Select an initial threshold based on those results.
-8. Pin the model identifier and revision for reproducible releases.
+4. Test threats, identity attacks, harassment/insults, obscenity/profanity,
+   general toxicity, and benign contextual examples.
+5. Include representative human-written and AI-generated support messages,
+   evasive wording, quoted abuse, reclaimed language, and identity references.
+6. Record human-reviewed expected labels and actual multi-label scores in a
+   versioned evaluation dataset.
+7. Measure per-category precision, recall, false positives, false negatives,
+   relevant slice performance, and latency before selecting thresholds.
+8. Document the release decision and pin the model identifier and revision.
 
 Downloaded model weights, virtual environments, secrets, and Python caches must
 not be committed to Git.
@@ -859,7 +1031,10 @@ Batch request:
   "sequences": [
     {
       "sequenceId": "sheet-0-row-0",
-      "text": "Hello world"
+      "text": "Hello world",
+      "conversationId": "conversation-42",
+      "speakerRole": "agent",
+      "language": "en"
     },
     {
       "sequenceId": "sheet-0-row-1",
@@ -878,23 +1053,19 @@ Batch response:
   "predictions": [
     {
       "sequenceId": "sheet-0-row-0",
-      "category": "neutral",
-      "confidence": 0.93,
-      "manualReviewRequired": false,
       "scores": {
         "toxicity": 0.02,
         "insult": 0.01
-      }
+      },
+      "inputTruncated": false
     },
     {
       "sequenceId": "sheet-0-row-1",
-      "category": "insult",
-      "confidence": 0.91,
-      "manualReviewRequired": false,
       "scores": {
         "toxicity": 0.89,
         "insult": 0.91
-      }
+      },
+      "inputTruncated": false
     }
   ]
 }
@@ -903,6 +1074,9 @@ Batch response:
 The model must be loaded once during FastAPI application lifespan, not once per
 request. The endpoint must validate maximum text length and batch size, echo
 every sequence ID exactly once, and return consistent structured errors.
+FastAPI returns model evidence only. Spring applies the versioned policy to
+produce the primary risk, severity, confidence, and review decision; this keeps
+organization policy independent from a particular model provider.
 
 ## 5. Connect Spring Boot to FastAPI
 
@@ -914,16 +1088,29 @@ public interface ClassificationService {
 }
 ```
 
-The implementation structure will become:
+The Module 3 implementation structure is:
 
 ```text
 ClassificationService
-|-- KeywordClassifier
-`-- HuggingFaceClassifier
+        |
+        v
+RiskClassificationService
+   |                 |
+   v                 v
+RiskModel        ClassificationPolicy
+   |                 |
+   v                 v
+DeterministicRiskModel  VersionedRiskPolicy
 ```
 
-`HuggingFaceClassifier` will call FastAPI through Spring `RestClient`. Keep the
-model URL and operational settings outside the source code:
+`ConversationRiskWorkflowService` calls mapped Excel extraction and then this
+batch pipeline, returning a correlated `ConversationRiskAssessment` for the
+future workbook report generator.
+
+The later FastAPI adapter will implement `RiskModel` and replace
+`DeterministicRiskModel`; orchestration and policy will not change. It will call
+FastAPI through Spring `RestClient`. Keep the model URL and operational settings
+outside the source code:
 
 ```properties
 classification.provider=huggingface
@@ -944,12 +1131,14 @@ Introduce an `ExcelReportService` responsible for:
 
 1. Opening the original workbook.
 2. Locating classified sequences through their saved coordinates.
-3. Creating one reusable style for each category.
+3. Creating one reusable style for each primary category.
 4. Applying the appropriate colour to every source cell in the sequence.
-5. Adding category and confidence columns.
-6. Creating a classification legend worksheet.
-7. Writing the result to a byte array.
-8. Returning a downloadable `.xlsx` file.
+5. Adding scores, primary category, severity, review status/reason, model
+   revision, and policy version columns.
+6. Creating a Review Queue ordered by severity and confidence.
+7. Creating a Summary with counts by risk category and review status.
+8. Creating a Legend that explains colours and their limitations.
+9. Writing the result to a byte array and returning a downloadable `.xlsx` file.
 
 Do not create a separate Apache POI `CellStyle` for every cell. Reuse styles by
 category to avoid workbook style limits and unnecessary memory usage.
@@ -983,10 +1172,11 @@ sequenceDiagram
     API->>Excel: Extract text and coordinates
     Excel-->>API: List of ExtractedSequence
     API->>Model: Batch classification request
-    Model-->>API: Ordered predictions
-    API->>Report: Original workbook + predictions
-    Report-->>API: Annotated workbook bytes
-    API-->>User: Download classified workbook
+    Model-->>API: Multi-label scores + model revision
+    API->>API: Apply versioned risk policy
+    API->>Report: Workbook + decisions + audit metadata
+    Report-->>API: Annotated workbook + review queue
+    API-->>User: Download review workbook
 ```
 
 ## 8. Add validation and failure handling
@@ -1001,6 +1191,8 @@ Validate:
 - Workbook readability.
 - Model-service availability.
 - Prediction count and sequence IDs against the submitted batch.
+- Required mapped text column and valid optional context-column mappings.
+- Known model revision and policy version.
 
 Operational requirements:
 
@@ -1019,8 +1211,9 @@ Java tests should cover:
 - Blank rows and cells.
 - Formula evaluation.
 - FastAPI request and response mapping.
-- Category-to-colour mapping.
-- Generated workbook fills and legend content.
+- Risk-policy thresholds, precedence, uncertainty, and manual-review routing.
+- Category-to-colour mapping and accessible text labels.
+- Generated workbook fills, review queue, summary, and legend content.
 - Multipart upload and workbook download.
 - Model-service timeout and failure behavior.
 
@@ -1030,7 +1223,7 @@ Python tests should cover:
 - Health and readiness reporting.
 - Batch request validation.
 - Prediction order and response schema.
-- Threshold-to-category mapping.
+- Multi-label score mapping and response-contract validation.
 - Oversized text and batch rejection.
 
 Maintain a small golden `.xlsx` test fixture. Reopen generated output through
@@ -1068,10 +1261,12 @@ The first React/TypeScript interface should remain small:
 - File type and size feedback.
 - Processing indicator.
 - Download button for the classified workbook.
-- Category colour legend.
+- Risk and manual-review counts.
+- Category colour legend with explicit text labels.
 - Clear validation and service-error messages.
 
-Authentication, usage scorecards, and charts remain V2 work.
+Authentication, reviewer case management, audit history, feedback, and richer
+operational/model-quality dashboards remain V2 work.
 
 ## 12. Automate and release V1
 
@@ -1090,7 +1285,9 @@ V1 release checklist:
 - Both health checks pass.
 - The sample workbook processes successfully.
 - The returned workbook opens correctly in Excel.
-- Categories, confidence values, and colours match the agreed policy.
+- Scores, primary categories, severity, review decisions, and colours match the
+  versioned policy.
+- Review Queue, Summary, Legend, model revision, and policy version are present.
 - Uploaded text is neither logged nor retained.
 - Documentation contains local and container run instructions.
 
@@ -1099,22 +1296,26 @@ V1 release checklist:
 ```text
 Milestone 1  Establish API errors, configuration, health, and CI baseline
 Milestone 2  Securely validate and extract coordinate-aware Excel sequences
-Milestone 3  Freeze classification contracts and deterministic test adapter
+Milestone 3  Add conversation-column mapping, classification contracts, and policy adapter
 Milestone 4  Evaluate and pin the selected Hugging Face model
 Milestone 5  Expose batch predictions through FastAPI
 Milestone 6  Call FastAPI safely from Spring Boot
-Milestone 7  Generate and return the colour-coded workbook
+Milestone 7  Generate the annotated workbook, review queue, summary, and legend
 Milestone 8  Add contract, integration, workbook, security, and load tests
 Milestone 9  Dockerize, observe, and harden both services
 Milestone 10 Add the upload interface and release v1.0.0
 ```
 
-The immediate implementation target is Milestone 1 followed by Milestone 2.
-Model experiments can proceed separately, but production model integration must
-build on the stable upload, domain, and operational contracts.
+Milestones 1 through 3 are implemented. The immediate implementation target is
+Milestone 4: create the evaluation dataset and compare candidate models. Model
+integration must build on the stable upload, domain, policy, and operational
+contracts.
 
 ## Reference documentation
 
+- [Microsoft Purview Communication Compliance](https://learn.microsoft.com/en-us/purview/communication-compliance)
+- [Genesys Cloud quality management](https://help.mypurecloud.com/articles/about-quality-management/)
+- [AWS Comprehend trust and safety](https://docs.aws.amazon.com/comprehend/latest/dg/trust-safety.html)
 - [OWASP File Upload Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html)
 - [OWASP API4: Unrestricted Resource Consumption](https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/)
 - [OWASP API10: Unsafe Consumption of APIs](https://owasp.org/API-Security/editions/2023/en/0xaa-unsafe-consumption-of-apis/)

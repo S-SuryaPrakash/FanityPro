@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
  * placeholders and do not represent probabilities from a trained model.</p>
  */
 @Service
-public class KeywordClassifier implements ClassificationService {
+public class KeywordClassifier implements LegacyClassificationService {
 
 	private static final int MAX_TEXT_LENGTH = 10_000;
 

@@ -19,11 +19,11 @@ import org.springframework.web.multipart.MultipartFile;
 public class UploadClassificationService {
 
 	private final ExcelService excelService;
-	private final ClassificationService classificationService;
+	private final LegacyClassificationService classificationService;
 
 	public UploadClassificationService(
 			ExcelService excelService,
-			ClassificationService classificationService) {
+			LegacyClassificationService classificationService) {
 		this.excelService = excelService;
 		this.classificationService = classificationService;
 	}
