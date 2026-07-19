@@ -9,6 +9,35 @@ permissions:
   contents: read
 
 jobs:
+  model-evaluation:
+    name: Model evaluation contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Validate evaluation dataset
+        run: python model-service/scripts/validate_dataset.py
+
+      - name: Run dependency-free evaluation tests
+        run: python -m unittest discover -s model-service/tests -p "test_*.py" -v
+
+      - name: Compile evaluation scripts
+        run: >-
+          python -m py_compile
+          model-service/scripts/evaluation_lib.py
+          model-service/scripts/validate_dataset.py
+          model-service/scripts/evaluate_predictions.py
+          model-service/scripts/select_thresholds.py
+          model-service/scripts/run_hf_evaluation.py
+
   java:
     name: Java verification
     runs-on: ubuntu-latest

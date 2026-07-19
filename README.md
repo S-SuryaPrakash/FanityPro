@@ -823,8 +823,9 @@ contracts that every classifier and report implementation will reuse.
   extraction.
 - [x] Module 3: conversation-column mapping, stable classification contracts,
   versioned decision policy, and deterministic test adapter.
-- [ ] Module 4 onward: model evaluation, FastAPI, report generation, hardening,
-  and release.
+- [ ] Module 4: evaluation tooling and a synthetic seed dataset are implemented;
+  independent human review and a larger domain dataset remain before selection.
+- [ ] Module 5 onward: FastAPI, report generation, hardening, and release.
 
 ## Planned technology stack
 
@@ -1306,10 +1307,12 @@ Milestone 9  Dockerize, observe, and harden both services
 Milestone 10 Add the upload interface and release v1.0.0
 ```
 
-Milestones 1 through 3 are implemented. The immediate implementation target is
-Milestone 4: create the evaluation dataset and compare candidate models. Model
-integration must build on the stable upload, domain, policy, and operational
-contracts.
+Milestones 1 through 3 are implemented. Milestone 4 now has reproducible
+evaluation tooling, safe pinned-candidate loading, draft seed data, and an
+initial smoke report. It remains open until independent reviewers adjudicate the
+dataset and an adequately sized domain evaluation supports a model-selection
+decision. Model integration must build on that evidence as well as the stable
+upload, domain, policy, and operational contracts.
 
 ## Reference documentation
 

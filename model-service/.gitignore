@@ -16,6 +16,7 @@ __pycache__/
 # Locally downloaded model artifacts
 model-cache/
 models/
+evaluation/results/
 
 # Editor and operating-system files
 .idea/

@@ -1,0 +1,11 @@
+{
+  "thresholdVersion": "smoke-baseline-v1",
+  "approvedForProduction": false,
+  "thresholds": {
+    "THREAT": 0.5,
+    "HATE_OR_IDENTITY_ATTACK": 0.5,
+    "HARASSMENT_OR_INSULT": 0.5,
+    "OBSCENE_OR_PROFANE": 0.5,
+    "GENERAL_TOXICITY": 0.5
+  }
+}

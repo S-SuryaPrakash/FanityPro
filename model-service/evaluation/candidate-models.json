@@ -1,0 +1,76 @@
+{
+  "manifestVersion": "v1",
+  "candidates": [
+    {
+      "key": "toxic-bert",
+      "modelId": "unitary/toxic-bert",
+      "revision": "4d6c22e74ba2fdd26bc4f7238f50766b045a0d94",
+      "license": "apache-2.0",
+      "evaluationStatus": "eligible",
+      "source": "https://huggingface.co/unitary/toxic-bert",
+      "domainLabelMapping": {
+        "THREAT": ["threat"],
+        "HATE_OR_IDENTITY_ATTACK": ["identity_hate"],
+        "HARASSMENT_OR_INSULT": ["insult"],
+        "OBSCENE_OR_PROFANE": ["obscene"],
+        "GENERAL_TOXICITY": ["toxic", "severe_toxic"]
+      },
+      "notes": "English BERT model trained on Wikipedia toxic-comment labels."
+    },
+    {
+      "key": "unbiased-toxic-roberta",
+      "modelId": "unitary/unbiased-toxic-roberta",
+      "revision": "36295dd80b422dc49f40052021430dae76241adc",
+      "license": "apache-2.0",
+      "evaluationStatus": "rejected",
+      "rejectionReason": "Pinned revision has no safetensors weights; production-safe loading is unavailable.",
+      "source": "https://huggingface.co/unitary/unbiased-toxic-roberta",
+      "domainLabelMapping": {
+        "THREAT": ["threat"],
+        "HATE_OR_IDENTITY_ATTACK": ["identity_attack"],
+        "HARASSMENT_OR_INSULT": ["insult"],
+        "OBSCENE_OR_PROFANE": ["obscene", "sexual_explicit"],
+        "GENERAL_TOXICITY": ["toxicity", "severe_toxicity"]
+      },
+      "ignoredIdentityMentionLabels": [
+        "male", "female", "homosexual_gay_or_lesbian", "christian",
+        "jewish", "muslim", "black", "white",
+        "psychiatric_or_mental_illness"
+      ],
+      "notes": "English RoBERTa model trained for unintended-bias-aware toxicity classification. Identity-mention outputs are never treated as harmful labels."
+    },
+    {
+      "key": "bert-multilabel-jigsaw",
+      "modelId": "Koushim/bert-multilabel-jigsaw-toxic-classifier",
+      "revision": "d0ee7f441bb8f76269c858f12d1e396e2c3abb4b",
+      "license": "apache-2.0",
+      "evaluationStatus": "rejected",
+      "rejectionReason": "Pinned model config exposes generic labels and loading reports an unexpected training-weight key; domain-label correlation is not self-describing.",
+      "source": "https://huggingface.co/Koushim/bert-multilabel-jigsaw-toxic-classifier",
+      "domainLabelMapping": {
+        "THREAT": ["threat"],
+        "HATE_OR_IDENTITY_ATTACK": ["identity_attack"],
+        "HARASSMENT_OR_INSULT": ["insult"],
+        "OBSCENE_OR_PROFANE": ["obscene", "sexual_explicit"],
+        "GENERAL_TOXICITY": ["toxicity", "severe_toxicity"]
+      },
+      "notes": "Safe-weight English BERT comparison candidate trained on processed Jigsaw data. Its self-reported evaluation and low external usage require independent verification."
+    },
+    {
+      "key": "minilm-toxic-jigsaw",
+      "modelId": "minuva/MiniLMv2-toxic-jigsaw",
+      "revision": "00eacca7ba7c09b1e82db508b03a901bf9cc89eb",
+      "license": "apache-2.0",
+      "evaluationStatus": "eligible",
+      "source": "https://huggingface.co/minuva/MiniLMv2-toxic-jigsaw",
+      "domainLabelMapping": {
+        "THREAT": ["threat"],
+        "HATE_OR_IDENTITY_ATTACK": ["identity_hate"],
+        "HARASSMENT_OR_INSULT": ["insult"],
+        "OBSCENE_OR_PROFANE": ["obscene"],
+        "GENERAL_TOXICITY": ["toxic", "severe_toxic"]
+      },
+      "notes": "Safe-weight 22.7M-parameter MiniLM student distilled from toxic-bert. It provides a latency/size comparison, not independent training evidence."
+    }
+  ]
+}
