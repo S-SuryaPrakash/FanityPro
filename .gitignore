@@ -4,6 +4,10 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+### Python ###
+/.venv/
+/.pytest_cache/
+
 ### STS ###
 .apt_generated
 .classpath

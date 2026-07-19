@@ -46,6 +46,20 @@ class GlobalExceptionHandlerTests {
 		assertEquals("MODEL_NOT_APPROVED", response.getBody().getProperties().get("errorCode"));
 	}
 
+	@Test
+	void mapsReportFailuresToASafeInternalError() {
+		MockHttpServletRequest request = new MockHttpServletRequest();
+		request.setAttribute(CorrelationIdFilter.REQUEST_ATTRIBUTE, "module-7-error");
+
+		ResponseEntity<ProblemDetail> response = handler.handleReportGeneration(
+				new ReportGenerationException("The classified workbook could not be generated."),
+				request);
+
+		assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+		assertEquals("REPORT_GENERATION_FAILED",
+				response.getBody().getProperties().get("errorCode"));
+	}
+
 	private ResponseEntity<ProblemDetail> handle(
 			ModelServiceException.Reason reason,
 			String message) {

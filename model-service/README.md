@@ -59,9 +59,18 @@ until that gate is implemented deliberately in a later change.
 From the repository root:
 
 ```powershell
-py -3.13 -m venv model-service/.venv
-& .\model-service\.venv\Scripts\python.exe -m pip install -r model-service/requirements.txt
-& .\model-service\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir model-service --host 127.0.0.1 --port 8000
+python -m venv .venv
+& .\.venv\Scripts\python.exe -m pip install -r model-service/requirements.txt
+& .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir model-service --host 127.0.0.1 --port 8000
+```
+
+The full requirements include PyTorch and Transformers for actual model
+inference. To run the lightweight API and evaluation tests without downloading
+model weights, install and execute only the test requirements:
+
+```powershell
+& .\.venv\Scripts\python.exe -m pip install -r model-service/requirements-test.txt
+& .\.venv\Scripts\python.exe -m pytest model-service/tests -q
 ```
 
 The first startup may download the pinned model into the ignored
@@ -98,5 +107,5 @@ profile still selects `DeterministicRiskModel`. Production configuration keeps
 the provisional waiver disabled.
 
 Downloaded model weights, generated predictions, virtual environments, secrets,
-and Python caches must not be committed to Git. They are excluded by this
-directory's `.gitignore`.
+and Python caches must not be committed to Git. They are excluded by the
+repository and model-service `.gitignore` files.

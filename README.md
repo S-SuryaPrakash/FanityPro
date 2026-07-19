@@ -1,6 +1,9 @@
 # Content Filter
 
-Content Filter is a Spring Boot application that accepts an Excel workbook, extracts the non-empty rows from its first worksheet, classifies the text in each row, and returns structured JSON results.
+Content Filter is a Spring Boot application that accepts an Excel conversation
+workbook, classifies each mapped message, and returns an auditable annotated
+`.xlsx` workbook. The original prototype JSON endpoint remains available during
+the V1 migration.
 
 The current endpoint classifier is deliberately simple and keyword-based. Its
 single-text contract is retained temporarily through `LegacyClassificationService`.
@@ -17,10 +20,16 @@ production taxonomy.
 ## Current capabilities
 
 - Accept validated `.xlsx` files through the required `file` part at `POST /upload`.
+- Accept the standard conversation workbook at `POST /api/v1/files/classify` and
+  return `classified-<original-name>.xlsx` as a non-cacheable download.
 - Read the first worksheet with Apache POI.
-- Convert every non-empty row into tab-separated text.
-- Classify each extracted row as `abusive`, `professional`, or `neutral`.
-- Return file metadata and a classification result for every extracted row.
+- Support the fixed V1 `text` header and optional `conversation_id`, `message_id`,
+  `speaker_role`, `timestamp`, `language`, and `channel` headers.
+- Preserve source coordinates, classify mapped messages in batches, and apply a
+  versioned risk policy.
+- Colour source message cells and add decision, score, model, and policy columns.
+- Add Review Queue, Summary, and Legend worksheets to the returned workbook.
+- Retain the legacy row-as-message JSON classification endpoint.
 - Expose Actuator health, liveness, and readiness endpoints.
 
 ## End-to-end architecture
@@ -129,6 +138,9 @@ sequenceDiagram
 | `ClassificationService` | Defines the new batch-first risk-classification contract. |
 | `RiskClassificationService` | Correlates model responses by sequence ID and applies policy. |
 | `ConversationRiskWorkflowService` | Coordinates mapped extraction and batch risk decisions. |
+| `WorkbookClassificationService` | Coordinates the complete upload-to-download V1 workflow. |
+| `ExcelReportService` | Annotates source cells and creates the queue, summary, and legend sheets. |
+| `FileClassificationController` | Returns the versioned classified workbook download. |
 | `VersionedRiskPolicy` | Converts model scores into a category, severity, and review decision. |
 | `KeywordClassifier` | Implements the current keyword-based classification rules. |
 | `UploadResponse` | Contains uploaded-file metadata and all row results. |
@@ -166,14 +178,14 @@ Matching is case-insensitive. Input must not be blank or longer than 10,000 char
 
 ## API
 
-### Upload and classify an Excel file
+### Legacy JSON upload endpoint
 
 ```http
 POST /upload
 Content-Type: multipart/form-data
 ```
 
-The controller uses the first file part in the multipart request. A conventional field name such as `file` is recommended.
+The multipart part must be named `file`.
 
 Example with curl:
 
@@ -212,6 +224,27 @@ Example response:
   ]
 }
 ```
+
+### Classify and download an annotated workbook
+
+The V1 endpoint expects a header named `text` on the first row of the first
+worksheet. Optional standard context headers are listed under Current
+capabilities. Workbooks without a non-empty message are rejected.
+
+```http
+POST /api/v1/files/classify
+Content-Type: multipart/form-data
+```
+
+```bash
+curl -X POST \
+  -F "file=@conversation.xlsx;type=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" \
+  --output classified-conversation.xlsx \
+  http://localhost:8080/api/v1/files/classify
+```
+
+Successful responses use the Excel media type, an attachment filename, and
+`Cache-Control: no-store`. Failures use the existing Problem Details contract.
 
 ### Health check
 
@@ -282,6 +315,7 @@ Run the complete test suite on Windows:
 
 ```powershell
 .\mvnw.cmd test
+& .\.venv\Scripts\python.exe -m pytest model-service/tests -q
 ```
 
 The current tests verify:
@@ -299,6 +333,9 @@ The current tests verify:
 - Mapped extraction separates message text from conversation metadata.
 - Batch results are correlated by sequence ID rather than provider order.
 - Versioned policy handles thresholds, conflicts, uncertainty, and truncation.
+- FastAPI schemas, health endpoints, batch limits, and pinned model manifests.
+- Annotated workbook colours, decision columns, review queue, summary, and legend.
+- The versioned multipart endpoint returns a non-cacheable `.xlsx` download.
 
 ## Project structure
 
@@ -833,7 +870,10 @@ contracts that every classifier and report implementation will reuse.
 - [x] Module 6: profile-selected Spring `RestClient` adapter, bounded batching,
   timeouts, one controlled retry, correlation, model-revision and release-gate
   validation, readiness integration, and HTTP contract tests.
-- [ ] Module 7 onward: annotated report generation, hardening, and release.
+- [x] Module 7: coordinate-aware workbook annotation, reusable category styles,
+  review queue, summary, legend, versioned download endpoint, and workbook-level
+  integration tests.
+- [ ] Module 8 onward: hardening, containers, upload interface, and release.
 
 ## Planned technology stack
 
@@ -1160,13 +1200,13 @@ the inbound correlation ID, validates every returned sequence ID and all five
 scores, and never falls back silently after an HTTP failure.
 
 The current unversioned `/upload` endpoint intentionally remains on the legacy
-keyword-classifier DTO. The FastAPI adapter is wired into the batch-first
-`ConversationRiskWorkflowService`; Module 7 will expose that workflow through
-the versioned annotated-workbook endpoint without breaking the legacy contract.
+keyword-classifier DTO. The versioned `/api/v1/files/classify` endpoint uses the
+batch-first `ConversationRiskWorkflowService` and returns the annotated workbook
+without breaking that legacy contract.
 
 ## 6. Generate the annotated workbook
 
-Introduce an `ExcelReportService` responsible for:
+`ExcelReportService` now:
 
 1. Opening the original workbook.
 2. Locating classified sequences through their saved coordinates.
@@ -1181,6 +1221,18 @@ Introduce an `ExcelReportService` responsible for:
 
 Do not create a separate Apache POI `CellStyle` for every cell. Reuse styles by
 category to avoid workbook style limits and unnecessary memory usage.
+
+The implemented source-sheet columns are:
+
+- Primary category, severity, confidence, review status, and review reason.
+- Model ID, immutable model revision, and policy version.
+- One score column for each detected-risk category.
+
+`Review Queue` contains review-required messages ordered by severity and then
+confidence. `Summary` contains category and review-status counts. `Legend`
+explains every colour and explicitly states that colour is not a safety guarantee
+or a word-level explanation. Input workbooks that already use these reserved
+sheet names or report columns are rejected rather than overwritten.
 
 ## 7. Return the workbook through a versioned endpoint
 
@@ -1345,7 +1397,7 @@ Milestone 9  Dockerize, observe, and harden both services
 Milestone 10 Add the upload interface and release v1.0.0
 ```
 
-Milestones 1 through 3 and the Milestones 5 and 6 service boundary are implemented.
+Milestones 1 through 3 and Milestones 5 through 7 are implemented.
 Milestone 4 now has reproducible
 evaluation tooling, safe pinned-candidate loading, a 240-message realistic
 synthetic domain corpus, and an initial smoke report. It remains open until

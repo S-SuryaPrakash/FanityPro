@@ -1,7 +1,7 @@
 package com.example.contentfilter.exception;
 
-import com.example.contentfilter.web.CorrelationIdFilter;
 import com.example.contentfilter.service.ModelServiceException;
+import com.example.contentfilter.web.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.time.OffsetDateTime;
@@ -105,6 +105,20 @@ public class GlobalExceptionHandler {
 					exception.getMessage(),
 					request);
 		};
+	}
+
+	/** Maps report failures without exposing workbook or Apache POI internals. */
+	@ExceptionHandler(ReportGenerationException.class)
+	public ResponseEntity<ProblemDetail> handleReportGeneration(
+			ReportGenerationException exception,
+			HttpServletRequest request) {
+		LOGGER.error("Workbook report generation failed with correlation ID {}",
+				correlationId(request), exception);
+		return problem(
+				HttpStatus.INTERNAL_SERVER_ERROR,
+				"REPORT_GENERATION_FAILED",
+				exception.getMessage(),
+				request);
 	}
 
 	/** Handles uploads rejected by Spring's multipart size boundary. */
