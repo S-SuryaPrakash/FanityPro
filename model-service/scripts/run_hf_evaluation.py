@@ -12,7 +12,9 @@ from typing import Any
 from evaluation_lib import RISK_LABELS, load_jsonl, validate_dataset
 
 MODEL_SERVICE_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DATASET = MODEL_SERVICE_ROOT / "evaluation" / "datasets" / "v1-seed.jsonl"
+DEFAULT_DATASET = (
+    MODEL_SERVICE_ROOT / "evaluation" / "datasets" / "v1-domain-synthetic.jsonl"
+)
 DEFAULT_MANIFEST = MODEL_SERVICE_ROOT / "evaluation" / "candidate-models.json"
 
 

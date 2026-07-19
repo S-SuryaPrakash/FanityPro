@@ -6,6 +6,10 @@ Status: **No production model selected.** The dataset is synthetic, contains
 only 40 examples, and is still marked `draft`. Results below validate the
 evaluation process and reveal candidate risks; they are not release evidence.
 
+This report records the original `v1-seed` experiment. The later
+`v1-domain-synthetic` corpus expands coverage to 240 messages; candidates must
+be rerun on it, and its generated labels still require human adjudication.
+
 ## Supply-chain checks
 
 | Candidate | Pinned revision | Outcome |

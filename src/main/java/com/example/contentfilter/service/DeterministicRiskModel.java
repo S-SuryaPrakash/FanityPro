@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,6 +15,10 @@ import org.springframework.stereotype.Component;
  * It is not a trained model and must be replaced before a production release.
  */
 @Component
+@ConditionalOnProperty(
+		name = "content-filter.classification.provider",
+		havingValue = "deterministic",
+		matchIfMissing = true)
 public class DeterministicRiskModel implements RiskModel {
 
 	static final String MODEL_ID = "deterministic-risk-adapter";

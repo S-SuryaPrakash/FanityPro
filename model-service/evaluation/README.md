@@ -7,13 +7,18 @@ support and AI-assistant domain.
 
 ## Current state
 
-- `datasets/v1-seed.jsonl` is a synthetic smoke dataset, not production ground
-  truth. Every row is marked `draft` until two people review it and disagreements
-  are adjudicated.
+- `datasets/v1-domain-synthetic.jsonl` is the default 240-message realistic
+  synthetic smoke corpus. It is reproducible from `scripts/build_domain_dataset.py`
+  and its coverage is documented in `DATASET_CARD.md`.
+- `datasets/v1-seed.jsonl` is retained as the original 40-message tooling seed.
+- Both datasets are synthetic, not production ground truth. Every row is marked
+  `draft`; generated labels cannot be promoted without independent review.
 - `candidate-models.json` pins the Hugging Face candidates and documents
   how their native labels map to the Java risk taxonomy.
 - `baseline-thresholds.json` exists only to exercise the evaluation pipeline.
   Its values are not approved production thresholds.
+- `DOMAIN_SMOKE_REPORT.md` records an end-to-end MiniLM proof run on the expanded
+  corpus and the important failure modes it exposed.
 - No model is selected yet.
 
 ## Dataset lifecycle
@@ -40,17 +45,22 @@ Compare once on untouched test split
 Document release decision or reject all candidates
 ```
 
-Do not tune thresholds against the test split. A production decision requires a
-larger, privacy-reviewed domain dataset; the seed file only proves the tooling.
+Do not tune thresholds against the test split. The expanded corpus tests the
+tooling and hard slices, but a production decision still requires authorised,
+privacy-reviewed and independently adjudicated domain data.
 
 ## Commands
 
 Validate the dataset without installing ML dependencies:
 
 ```bash
+python scripts/build_domain_dataset.py --check
 python scripts/validate_dataset.py
 python -m unittest discover -s tests -p "test_*.py"
 ```
+
+`validate_dataset.py --profile release` deliberately fails on the current
+corpus because its examples have not been independently adjudicated.
 
 Install optional evaluation dependencies in a virtual environment:
 

@@ -1,6 +1,11 @@
 package com.example.contentfilter;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
+import com.example.contentfilter.service.DeterministicRiskModel;
+import com.example.contentfilter.service.RiskModel;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 /**
@@ -10,11 +15,15 @@ import org.springframework.boot.test.context.SpringBootTest;
 @SpringBootTest
 class ContentfilterApplicationTests {
 
+	@Autowired
+	private RiskModel riskModel;
+
 	/**
 	 * Fails when application configuration or dependency injection is invalid.
 	 */
 	@Test
 	void contextLoads() {
+		assertInstanceOf(DeterministicRiskModel.class, riskModel);
 	}
 
 }

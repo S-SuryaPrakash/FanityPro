@@ -823,9 +823,17 @@ contracts that every classifier and report implementation will reuse.
   extraction.
 - [x] Module 3: conversation-column mapping, stable classification contracts,
   versioned decision policy, and deterministic test adapter.
-- [ ] Module 4: evaluation tooling and a synthetic seed dataset are implemented;
-  independent human review and a larger domain dataset remain before selection.
-- [ ] Module 5 onward: FastAPI, report generation, hardening, and release.
+- [ ] Module 4: evaluation tooling and a reproducible 240-message realistic
+  synthetic domain corpus are implemented; authorised domain sampling,
+  independent human review, and adjudication remain before model selection.
+- [x] Module 5: internal FastAPI batch inference, pinned safetensors loading,
+  domain-score mapping, health probes, structured errors, and API contract tests.
+  Its model remains explicitly provisional until the Module 4 human-review gate
+  is completed.
+- [x] Module 6: profile-selected Spring `RestClient` adapter, bounded batching,
+  timeouts, one controlled retry, correlation, model-revision and release-gate
+  validation, readiness integration, and HTTP contract tests.
+- [ ] Module 7 onward: annotated report generation, hardening, and release.
 
 ## Planned technology stack
 
@@ -835,7 +843,7 @@ contracts that every classifier and report implementation will reuse.
 | Excel processing | Apache POI 5.5.1 | V1 |
 | Model API | Python, FastAPI, Uvicorn | V1 |
 | Machine learning | Hugging Face Transformers, PyTorch | V1 |
-| Initial model | Toxicity classifier such as `unitary/toxic-bert` or Detoxify | V1 |
+| Development model candidate | Pinned `minuva/MiniLMv2-toxic-jigsaw` (provisional) | V1 |
 | Java-to-model communication | HTTP/JSON using Spring `RestClient` | V1 |
 | Decision policy | Versioned deterministic Java configuration | V1 |
 | Frontend | React with TypeScript | V1 |
@@ -1049,22 +1057,30 @@ Batch response:
 
 ```json
 {
-  "model": "unitary/toxic-bert",
-  "revision": "pinned-model-revision",
+  "model": "minuva/MiniLMv2-toxic-jigsaw",
+  "revision": "00eacca7ba7c09b1e82db508b03a901bf9cc89eb",
+  "evaluationStatus": "PROVISIONAL",
+  "approvedForProduction": false,
   "predictions": [
     {
       "sequenceId": "sheet-0-row-0",
       "scores": {
-        "toxicity": 0.02,
-        "insult": 0.01
+        "THREAT": 0.01,
+        "HATE_OR_IDENTITY_ATTACK": 0.01,
+        "HARASSMENT_OR_INSULT": 0.01,
+        "OBSCENE_OR_PROFANE": 0.01,
+        "GENERAL_TOXICITY": 0.02
       },
       "inputTruncated": false
     },
     {
       "sequenceId": "sheet-0-row-1",
       "scores": {
-        "toxicity": 0.89,
-        "insult": 0.91
+        "THREAT": 0.03,
+        "HATE_OR_IDENTITY_ATTACK": 0.04,
+        "HARASSMENT_OR_INSULT": 0.91,
+        "OBSCENE_OR_PROFANE": 0.12,
+        "GENERAL_TOXICITY": 0.89
       },
       "inputTruncated": false
     }
@@ -1108,16 +1124,20 @@ DeterministicRiskModel  VersionedRiskPolicy
 batch pipeline, returning a correlated `ConversationRiskAssessment` for the
 future workbook report generator.
 
-The later FastAPI adapter will implement `RiskModel` and replace
-`DeterministicRiskModel`; orchestration and policy will not change. It will call
-FastAPI through Spring `RestClient`. Keep the model URL and operational settings
-outside the source code:
+The Module 6 `FastApiRiskModel` implements `RiskModel` and replaces
+`DeterministicRiskModel` when the `fastapi` profile is active; orchestration and
+policy do not change. It calls FastAPI through Spring `RestClient`. The model
+URL, expected identity, timeouts, batching, retry count, and release waiver stay
+outside source code:
 
 ```properties
-classification.provider=huggingface
-classification.model-service-url=http://localhost:8000
-classification.batch-size=32
-classification.timeout=30s
+content-filter.classification.provider=fastapi
+content-filter.classification.model-service.base-url=http://127.0.0.1:8000
+content-filter.classification.model-service.batch-size=32
+content-filter.classification.model-service.connect-timeout=2s
+content-filter.classification.model-service.read-timeout=25s
+content-filter.classification.model-service.max-attempts=2
+content-filter.classification.model-service.allow-provisional=true
 ```
 
 When running through Docker Compose, the internal URL will be:
@@ -1125,6 +1145,24 @@ When running through Docker Compose, the internal URL will be:
 ```text
 http://contentfilter-model:8000
 ```
+
+For the current local development bridge, start FastAPI first and then run:
+
+```powershell
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=fastapi"
+```
+
+The profile is an explicit development waiver while Module 4 remains open.
+Without it, Spring uses `DeterministicRiskModel`. In a production configuration,
+`allow-provisional` remains `false`, so the current FastAPI response is rejected
+until human evaluation changes the model status to approved. Spring propagates
+the inbound correlation ID, validates every returned sequence ID and all five
+scores, and never falls back silently after an HTTP failure.
+
+The current unversioned `/upload` endpoint intentionally remains on the legacy
+keyword-classifier DTO. The FastAPI adapter is wired into the batch-first
+`ConversationRiskWorkflowService`; Module 7 will expose that workflow through
+the versioned annotated-workbook endpoint without breaking the legacy contract.
 
 ## 6. Generate the annotated workbook
 
@@ -1307,12 +1345,17 @@ Milestone 9  Dockerize, observe, and harden both services
 Milestone 10 Add the upload interface and release v1.0.0
 ```
 
-Milestones 1 through 3 are implemented. Milestone 4 now has reproducible
-evaluation tooling, safe pinned-candidate loading, draft seed data, and an
-initial smoke report. It remains open until independent reviewers adjudicate the
-dataset and an adequately sized domain evaluation supports a model-selection
-decision. Model integration must build on that evidence as well as the stable
-upload, domain, policy, and operational contracts.
+Milestones 1 through 3 and the Milestones 5 and 6 service boundary are implemented.
+Milestone 4 now has reproducible
+evaluation tooling, safe pinned-candidate loading, a 240-message realistic
+synthetic domain corpus, and an initial smoke report. It remains open until
+independent reviewers adjudicate authorised, privacy-reviewed domain data and
+that evaluation supports a model-selection decision. Milestone 5 therefore
+loads the current candidate only for development and always reports
+`approvedForProduction: false`; a production release remains blocked by the
+Milestone 4 gate. Spring can consume that provisional evidence only through the
+explicit `fastapi` development profile. The API builds on the stable upload,
+domain, policy, and operational contracts.
 
 ## Reference documentation
 

@@ -27,6 +27,17 @@ REQUIRED_FIELDS = {
     "review_status",
     "annotation_notes",
 }
+REQUIRED_DOMAIN_SLICES = (
+    "benign_identity_mention",
+    "quoted_harm",
+    "context_sensitive",
+    "direct_threat",
+    "identity_attack",
+    "direct_insult",
+    "profanity",
+    "hostile_tone",
+    "multi_label",
+)
 
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -48,6 +59,7 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
 def validate_dataset(records: list[dict[str, Any]]) -> list[str]:
     errors: list[str] = []
     seen_ids: set[str] = set()
+    seen_texts: set[str] = set()
     versions: set[str] = set()
     positive_coverage: dict[str, Counter[str]] = {
         "calibration": Counter(),
@@ -79,6 +91,12 @@ def validate_dataset(records: list[dict[str, Any]]) -> list[str]:
 
         if not isinstance(record["text"], str) or not record["text"].strip():
             errors.append(f"{prefix}: text must be a non-blank string")
+        else:
+            normalised_text = " ".join(record["text"].lower().split())
+            if normalised_text in seen_texts:
+                errors.append(f"{prefix}: duplicate normalised text")
+            else:
+                seen_texts.add(normalised_text)
         if record["language"] != "en":
             errors.append(f"{prefix}: V1 evaluation supports English only")
         if record["review_status"] not in {"draft", "reviewed", "adjudicated"}:
@@ -109,6 +127,56 @@ def validate_dataset(records: list[dict[str, Any]]) -> list[str]:
                 f"{split} split has no positive example for: "
                 + ", ".join(sorted(missing_labels))
             )
+    return errors
+
+
+def validate_domain_coverage(
+    records: list[dict[str, Any]],
+    minimum_examples_per_split: int = 100,
+    minimum_positives_per_label: int = 12,
+    minimum_examples_per_slice: int = 4,
+) -> list[str]:
+    """Check smoke-corpus coverage without claiming production readiness."""
+
+    errors: list[str] = []
+    for split in ("calibration", "test"):
+        rows = [record for record in records if record.get("split") == split]
+        if len(rows) < minimum_examples_per_split:
+            errors.append(
+                f"{split} split requires at least {minimum_examples_per_split} examples; "
+                f"found {len(rows)}"
+            )
+        for label in RISK_LABELS:
+            positive_count = sum(label in record.get("expected_labels", []) for record in rows)
+            if positive_count < minimum_positives_per_label:
+                errors.append(
+                    f"{split} split requires at least {minimum_positives_per_label} "
+                    f"positive examples for {label}; found {positive_count}"
+                )
+        for tag in REQUIRED_DOMAIN_SLICES:
+            slice_count = sum(tag in record.get("slice_tags", []) for record in rows)
+            if slice_count < minimum_examples_per_slice:
+                errors.append(
+                    f"{split} split requires at least {minimum_examples_per_slice} "
+                    f"examples for slice {tag}; found {slice_count}"
+                )
+        origins = {record.get("content_origin") for record in rows}
+        if not {"synthetic_human", "synthetic_ai"}.issubset(origins):
+            errors.append(f"{split} split must cover synthetic human and AI origins")
+    return errors
+
+
+def validate_release_readiness(records: list[dict[str, Any]]) -> list[str]:
+    """Enforce the human-annotation gate separately from structural validity."""
+
+    errors = validate_domain_coverage(records)
+    non_adjudicated = sum(
+        record.get("review_status") != "adjudicated" for record in records
+    )
+    if non_adjudicated:
+        errors.append(
+            f"{non_adjudicated} examples are not independently reviewed and adjudicated"
+        )
     return errors
 
 

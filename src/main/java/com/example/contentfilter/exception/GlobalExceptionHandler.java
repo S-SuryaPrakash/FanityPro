@@ -1,6 +1,7 @@
 package com.example.contentfilter.exception;
 
 import com.example.contentfilter.web.CorrelationIdFilter;
+import com.example.contentfilter.service.ModelServiceException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.time.OffsetDateTime;
@@ -75,6 +76,35 @@ public class GlobalExceptionHandler {
 			IllegalArgumentException exception,
 			HttpServletRequest request) {
 		return problem(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", exception.getMessage(), request);
+	}
+
+	/** Maps private FastAPI failures without exposing remote response bodies. */
+	@ExceptionHandler(ModelServiceException.class)
+	public ResponseEntity<ProblemDetail> handleModelService(
+			ModelServiceException exception,
+			HttpServletRequest request) {
+		return switch (exception.reason()) {
+			case TIMEOUT -> problem(
+					HttpStatus.GATEWAY_TIMEOUT,
+					"MODEL_SERVICE_TIMEOUT",
+					exception.getMessage(),
+					request);
+			case UNAVAILABLE -> problem(
+					HttpStatus.SERVICE_UNAVAILABLE,
+					"MODEL_SERVICE_UNAVAILABLE",
+					exception.getMessage(),
+					request);
+			case MODEL_NOT_APPROVED -> problem(
+					HttpStatus.SERVICE_UNAVAILABLE,
+					"MODEL_NOT_APPROVED",
+					exception.getMessage(),
+					request);
+			case REQUEST_REJECTED, INVALID_RESPONSE -> problem(
+					HttpStatus.BAD_GATEWAY,
+					"INVALID_MODEL_SERVICE_RESPONSE",
+					exception.getMessage(),
+					request);
+		};
 	}
 
 	/** Handles uploads rejected by Spring's multipart size boundary. */

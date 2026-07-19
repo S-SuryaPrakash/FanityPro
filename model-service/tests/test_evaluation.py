@@ -7,7 +7,15 @@ from pathlib import Path
 MODEL_SERVICE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(MODEL_SERVICE_ROOT / "scripts"))
 
-from evaluation_lib import RISK_LABELS, calculate_metrics, load_jsonl, validate_dataset
+from build_domain_dataset import build_dataset
+from evaluation_lib import (
+    RISK_LABELS,
+    calculate_metrics,
+    load_jsonl,
+    validate_dataset,
+    validate_domain_coverage,
+    validate_release_readiness,
+)
 from run_hf_evaluation import load_candidate, validate_native_mapping
 from select_thresholds import select_threshold
 
@@ -22,6 +30,29 @@ class DatasetValidationTests(unittest.TestCase):
         self.assertEqual([], validate_dataset(dataset))
         self.assertEqual(40, len(dataset))
         self.assertTrue(all(row["review_status"] == "draft" for row in dataset))
+
+    def test_expanded_domain_dataset_is_valid_and_reproducible(self) -> None:
+        dataset = load_jsonl(
+            MODEL_SERVICE_ROOT
+            / "evaluation"
+            / "datasets"
+            / "v1-domain-synthetic.jsonl"
+        )
+
+        self.assertEqual([], validate_dataset(dataset))
+        self.assertEqual([], validate_domain_coverage(dataset))
+        self.assertEqual(build_dataset(), dataset)
+        self.assertEqual(240, len(dataset))
+        self.assertEqual(120, sum(row["split"] == "calibration" for row in dataset))
+        self.assertEqual(120, sum(row["split"] == "test" for row in dataset))
+        self.assertEqual(240, len({row["text"] for row in dataset}))
+
+    def test_draft_domain_dataset_cannot_pass_release_gate(self) -> None:
+        dataset = build_dataset()
+
+        errors = validate_release_readiness(dataset)
+
+        self.assertTrue(any("not independently reviewed" in error for error in errors))
 
     def test_duplicate_id_is_rejected(self) -> None:
         row = {

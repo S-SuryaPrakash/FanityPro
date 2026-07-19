@@ -11,7 +11,9 @@ from typing import Any
 from evaluation_lib import RISK_LABELS, load_jsonl, validate_dataset
 
 MODEL_SERVICE_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DATASET = MODEL_SERVICE_ROOT / "evaluation" / "datasets" / "v1-seed.jsonl"
+DEFAULT_DATASET = (
+    MODEL_SERVICE_ROOT / "evaluation" / "datasets" / "v1-domain-synthetic.jsonl"
+)
 
 
 def main() -> int:
@@ -45,7 +47,9 @@ def main() -> int:
         for label in RISK_LABELS
     }
     output = {
-        "thresholdVersion": f"{arguments.candidate_key}-v1-seed-calibrated",
+        "thresholdVersion": (
+            f"{arguments.candidate_key}-{calibration[0]['dataset_version']}-calibrated"
+        ),
         "approvedForProduction": False,
         "datasetVersion": calibration[0]["dataset_version"],
         "selectionSplit": "calibration",
