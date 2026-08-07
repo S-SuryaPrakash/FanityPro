@@ -1,0 +1,1 @@
+{"detail":"The required mapped text header 'text' was not found.","instance":"urn:content-filter:request:a01031fa-2352-469e-a690-b6108fd0ab92","status":400,"title":"Bad Request","type":"urn:content-filter:problem:invalid-workbook","errorCode":"INVALID_WORKBOOK","correlationId":"a01031fa-2352-469e-a690-b6108fd0ab92","timestamp":"2026-08-08T01:02:13.3714849+05:30"}

@@ -1,0 +1,88 @@
+# Docker Compose for the Content Filter V1 deployment.
+#
+# Only contentfilter-api is exposed to the host. The model service runs on an
+# internal network and is never directly accessible from outside the container
+# boundary.
+#
+# Usage:
+#   docker compose up --build
+#   docker compose up --build -d           (detached)
+#   docker compose down
+#
+# The API starts with the "fastapi" profile so it connects to the model service.
+# The model service is marked provisional until the Module 4 evaluation gate
+# closes; the API profile explicitly allows provisional models for development.
+
+services:
+  contentfilter-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: contentfilter-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: fastapi
+      CONTENT_FILTER_MODEL_SERVICE_URL: http://contentfilter-model:8000
+      CONTENT_FILTER_ALLOW_PROVISIONAL_MODEL: "true"
+      CONTENT_FILTER_MAX_FILE_SIZE: 5MB
+      CONTENT_FILTER_MAX_SEQUENCES: "2000"
+    depends_on:
+      contentfilter-model:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health/liveness"]
+      interval: 10s
+      timeout: 3s
+      start_period: 30s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+    networks:
+      - contentfilter-internal
+    tmpfs:
+      - /tmp/contentfilter:size=50M,mode=1777
+
+  contentfilter-model:
+    build:
+      context: ./model-service
+      dockerfile: Dockerfile
+    container_name: contentfilter-model
+    restart: unless-stopped
+    # No ports exposed to the host — internal only
+    expose:
+      - "8000"
+    environment:
+      CONTENT_FILTER_MODEL_CANDIDATE_KEY: minilm-toxic-jigsaw
+      CONTENT_FILTER_MODEL_MANIFEST_PATH: /app/evaluation/candidate-models.json
+      CONTENT_FILTER_MODEL_CACHE_DIR: /app/model-cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')"]
+      interval: 10s
+      timeout: 5s
+      start_period: 120s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 1G
+    networks:
+      - contentfilter-internal
+    tmpfs:
+      - /tmp/contentfilter-model:size=10M,mode=1777
+
+networks:
+  contentfilter-internal:
+    driver: bridge
+    internal: true

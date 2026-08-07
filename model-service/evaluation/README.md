@@ -11,15 +11,22 @@ support and AI-assistant domain.
   synthetic smoke corpus. It is reproducible from `scripts/build_domain_dataset.py`
   and its coverage is documented in `DATASET_CARD.md`.
 - `datasets/v1-seed.jsonl` is retained as the original 40-message tooling seed.
-- Both datasets are synthetic, not production ground truth. Every row is marked
-  `draft`; generated labels cannot be promoted without independent review.
+- `datasets/v1-domain-adjudicated.jsonl` is the dual-reviewer adjudicated version
+  of the synthetic corpus. Reviewer 1 independently reviewed all 240 examples
+  and made 32 label changes (see `REVIEWER_1_REPORT.md`). Reviewer 2 then
+  challenged Reviewer 1's work and applied 28 corrections (see
+  `REVIEWER_2_CRITIQUE.md`). The final dataset passes `--profile release`
+  validation. Labels remain synthetic-ground-truth, not production data.
 - `candidate-models.json` pins the Hugging Face candidates and documents
   how their native labels map to the Java risk taxonomy.
 - `baseline-thresholds.json` exists only to exercise the evaluation pipeline.
   Its values are not approved production thresholds.
 - `DOMAIN_SMOKE_REPORT.md` records an end-to-end MiniLM proof run on the expanded
   corpus and the important failure modes it exposed.
-- No model is selected yet.
+- Both candidates are rejected. Threat recall of 0.25, 7/8 benign identity
+  mentions falsely flagged, and all quoted-harm/self-directed negatives
+  flagged. Fine-tuning on the adjudicated dataset is recommended before
+  re-evaluation. No model is selected for production.
 
 ## Dataset lifecycle
 

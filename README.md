@@ -370,10 +370,14 @@ These items are documented explicitly so future work can distinguish active beha
 ## Suggested next steps
 
 1. Remove or connect the unused request DTOs.
-2. Add header detection and explicit conversation-column mapping.
-3. Introduce the stable batch-first classification and policy contracts.
-4. Add a deterministic adapter that exercises the production risk taxonomy.
-5. Build the evaluation dataset before selecting and integrating a model.
+2. ~~Add header detection and explicit conversation-column mapping.~~ (done in Module 3)
+3. ~~Introduce the stable batch-first classification and policy contracts.~~ (done in Module 3)
+4. ~~Add a deterministic adapter that exercises the production risk taxonomy.~~ (done in Module 3)
+5. ~~Build the evaluation dataset before selecting and integrating a model.~~ (done in Module 4 — dual-reviewer adjudication complete; both candidates rejected; fine-tuning recommended)
+6. Fine-tune a model on the adjudicated domain dataset and re-evaluate against the release gate.
+7. Containerize both services with Docker Compose.
+8. Add the React upload interface.
+9. Harden with security, load, and golden-workbook tests.
 
 # Real-world product workflow
 
@@ -860,9 +864,13 @@ contracts that every classifier and report implementation will reuse.
   extraction.
 - [x] Module 3: conversation-column mapping, stable classification contracts,
   versioned decision policy, and deterministic test adapter.
-- [ ] Module 4: evaluation tooling and a reproducible 240-message realistic
-  synthetic domain corpus are implemented; authorised domain sampling,
-  independent human review, and adjudication remain before model selection.
+- [x] Module 4: evaluation tooling and a reproducible 240-message realistic
+  synthetic domain corpus are implemented; dual-reviewer independent adjudication
+  is complete (see `model-service/evaluation/REVIEWER_1_REPORT.md` and
+  `REVIEWER_2_CRITIQUE.md`). Both current candidates are rejected — threat
+  recall 0.25, 7/8 benign identity mentions falsely flagged, all quoted-harm
+  and self-directed negatives flagged. Fine-tuning on the adjudicated dataset
+  is recommended before re-evaluation. No model is selected for production.
 - [x] Module 5: internal FastAPI batch inference, pinned safetensors loading,
   domain-score mapping, health probes, structured errors, and API contract tests.
   Its model remains explicitly provisional until the Module 4 human-review gate
@@ -1397,15 +1405,18 @@ Milestone 9  Dockerize, observe, and harden both services
 Milestone 10 Add the upload interface and release v1.0.0
 ```
 
-Milestones 1 through 3 and Milestones 5 through 7 are implemented.
+Milestones 1 through 7 are implemented.
 Milestone 4 now has reproducible
 evaluation tooling, safe pinned-candidate loading, a 240-message realistic
-synthetic domain corpus, and an initial smoke report. It remains open until
-independent reviewers adjudicate authorised, privacy-reviewed domain data and
-that evaluation supports a model-selection decision. Milestone 5 therefore
+synthetic domain corpus, dual-reviewer independent adjudication (Reviewer 1:
+32 label changes; Reviewer 2: 28 corrections), and a clear rejection of both
+current candidates. Both candidates are rejected due to unacceptable threat
+recall (0.25), 7/8 benign identity mentions falsely flagged, and all
+quoted-harm/self-directed negatives flagged. Fine-tuning on the adjudicated
+dataset is recommended before re-evaluation. Milestone 5 therefore
 loads the current candidate only for development and always reports
 `approvedForProduction: false`; a production release remains blocked by the
-Milestone 4 gate. Spring can consume that provisional evidence only through the
+Milestone 4 model-selection gate. Spring can consume that provisional evidence only through the
 explicit `fastapi` development profile. The API builds on the stable upload,
 domain, policy, and operational contracts.
 

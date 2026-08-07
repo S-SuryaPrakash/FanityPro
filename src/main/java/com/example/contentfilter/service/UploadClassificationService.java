@@ -9,12 +9,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * Coordinates the complete upload-classification use case.
+ * Coordinates the V0 prototype upload-classification use case.
  *
- * <p>Excel parsing and text classification remain separate concerns: this
- * service obtains row text from {@link ExcelService} and sends each row to the
- * configured {@link ClassificationService} implementation.</p>
+ * @deprecated Use {@link WorkbookClassificationService} for the production
+ *             workbook-classification workflow.
  */
+@Deprecated(forRemoval = true)
+@SuppressWarnings("deprecation")
 @Service
 public class UploadClassificationService {
 

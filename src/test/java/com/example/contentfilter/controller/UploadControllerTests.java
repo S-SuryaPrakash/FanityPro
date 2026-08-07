@@ -14,6 +14,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
 /** Integration tests for the multipart-to-workbook HTTP boundary. */
+@SuppressWarnings("deprecation")
 @SpringBootTest
 @AutoConfigureMockMvc
 class UploadControllerTests {

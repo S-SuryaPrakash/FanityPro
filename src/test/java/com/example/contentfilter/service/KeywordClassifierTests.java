@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 /**
  * Unit tests for keyword rules, response metadata, and input validation.
  */
+@SuppressWarnings("deprecation")
 class KeywordClassifierTests {
 
 	private final LegacyClassificationService classifier = new KeywordClassifier();

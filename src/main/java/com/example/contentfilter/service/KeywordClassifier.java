@@ -14,7 +14,11 @@ import org.springframework.stereotype.Service;
  *
  * <p>Matching is case-insensitive. Confidence values are randomly generated
  * placeholders and do not represent probabilities from a trained model.</p>
+ *
+ * @deprecated This is a V0 prototype classifier. Use the deterministic or
+ *             FastAPI {@link ClassificationService} adapters for production.
  */
+@Deprecated(forRemoval = true)
 @Service
 public class KeywordClassifier implements LegacyClassificationService {
 

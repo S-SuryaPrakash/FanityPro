@@ -10,7 +10,14 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-/** HTTP entry point for the current Excel upload-classification workflow. */
+/**
+ * HTTP entry point for the V0 prototype upload-classification workflow.
+ *
+ * @deprecated Use {@link FileClassificationController#classify} ({@code /api/v1/files/classify})
+ *             for the production workbook-classification contract.
+ */
+@Deprecated(forRemoval = true)
+@SuppressWarnings("deprecation")
 @RestController
 public class UploadController {
 
