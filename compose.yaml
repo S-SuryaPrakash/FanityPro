@@ -1,8 +1,8 @@
-# Docker Compose for the Content Filter V1 deployment.
+# Docker Compose for the Content Filter deployment.
 #
-# Only contentfilter-api is exposed to the host. The model service runs on an
-# internal network and is never directly accessible from outside the container
-# boundary.
+# Only contentfilter-api is exposed to the host. The model service and
+# PostgreSQL database run on an internal network and are never directly
+# accessible from outside the container boundary.
 #
 # Usage:
 #   docker compose up --build
@@ -14,6 +14,24 @@
 # closes; the API profile explicitly allows provisional models for development.
 
 services:
+  contentfilter-db:
+    image: postgres:17-alpine
+    container_name: contentfilter-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: contentfilter
+      POSTGRES_USER: contentfilter
+      POSTGRES_PASSWORD: ${CONTENT_FILTER_DATABASE_PASSWORD:-contentfilter}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U contentfilter -d contentfilter"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - contentfilter-postgres-data:/var/lib/postgresql/data
+    networks:
+      - contentfilter-internal
+
   contentfilter-api:
     build:
       context: .
@@ -23,12 +41,17 @@ services:
     ports:
       - "8080:8080"
     environment:
-      SPRING_PROFILES_ACTIVE: fastapi
+      SPRING_PROFILES_ACTIVE: fastapi,v2
       CONTENT_FILTER_MODEL_SERVICE_URL: http://contentfilter-model:8000
       CONTENT_FILTER_ALLOW_PROVISIONAL_MODEL: "true"
+      CONTENT_FILTER_DATABASE_URL: jdbc:postgresql://contentfilter-db:5432/contentfilter
+      CONTENT_FILTER_DATABASE_USERNAME: contentfilter
+      CONTENT_FILTER_DATABASE_PASSWORD: ${CONTENT_FILTER_DATABASE_PASSWORD:-contentfilter}
       CONTENT_FILTER_MAX_FILE_SIZE: 5MB
       CONTENT_FILTER_MAX_SEQUENCES: "2000"
     depends_on:
+      contentfilter-db:
+        condition: service_healthy
       contentfilter-model:
         condition: service_healthy
     healthcheck:
@@ -86,3 +109,6 @@ networks:
   contentfilter-internal:
     driver: bridge
     internal: true
+
+volumes:
+  contentfilter-postgres-data:

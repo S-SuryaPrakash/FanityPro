@@ -513,6 +513,23 @@ and policy version. `No automated flag` does not mean guaranteed safe.
 - PostgreSQL persistence for users, cases, decisions, policy versions, and
   privacy-safe aggregates.
 
+#### V2.1 foundation status
+
+The V2 persistence foundation is available through the explicit `v2` Spring
+profile. It adds PostgreSQL, Flyway, and JPA while leaving the V1 default
+profile database-free. Flyway owns schema changes under
+`src/main/resources/db/migration`; Hibernate is configured to validate rather
+than generate the schema.
+
+The first migration creates the `app_users` table for the next module's local
+email/password accounts. It stores a password hash, never a password, and
+supports the initial `ADMIN` and `ANALYST` roles. Case, decision, note, and
+audit tables will arrive in later forward-only migrations.
+
+For the Compose stack, configure a non-default value for
+`CONTENT_FILTER_DATABASE_PASSWORD` before starting it. The database remains
+private to the Compose network; only the API is exposed to the host.
+
 ### V3 — Real-time API and webhook integrations
 
 - External support systems submit individual or batched human/AI messages
