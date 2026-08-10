@@ -7,9 +7,11 @@ FROM python:3.13-slim AS model-download
 
 WORKDIR /download
 
+COPY model-service/requirements-api.txt .
 COPY model-service/requirements-model.txt .
 
-RUN pip install --no-cache-dir -r requirements-model.txt
+RUN pip install --no-cache-dir -r requirements-api.txt && \
+    pip install --no-cache-dir -r requirements-model.txt
 
 # Copy the manifest and a small download script
 COPY model-service/evaluation/candidate-models.json /download/manifest.json
@@ -25,8 +27,8 @@ from app.settings import ModelServiceSettings; \
 from transformers import AutoModelForSequenceClassification, AutoTokenizer; \
 settings = ModelServiceSettings(_env_file=None); \
 candidate = load_eligible_candidate(pathlib.Path('/download/manifest.json'), settings.candidate_key); \
-model_id = candidate['modelId']; \
-revision = candidate['revision']; \
+model_id = candidate.model_id; \
+revision = candidate.revision; \
 print(f'Downloading {model_id} at revision {revision}'); \
 AutoModelForSequenceClassification.from_pretrained(model_id, revision=revision, cache_dir='/model-cache'); \
 AutoTokenizer.from_pretrained(model_id, revision=revision, cache_dir='/model-cache'); \

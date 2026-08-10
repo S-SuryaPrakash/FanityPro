@@ -70,13 +70,14 @@ services:
           memory: 256M
     networks:
       - contentfilter-internal
+      - contentfilter-edge
     tmpfs:
       - /tmp/contentfilter:size=50M,mode=1777
 
   contentfilter-model:
     build:
-      context: ./model-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: model-service/Dockerfile
     container_name: contentfilter-model
     restart: unless-stopped
     # No ports exposed to the host — internal only
@@ -109,6 +110,11 @@ networks:
   contentfilter-internal:
     driver: bridge
     internal: true
+  # Non-internal network so the API's published port actually reaches the host.
+  # Docker never sets up host port-forwarding for a container whose only
+  # network is marked internal: true.
+  contentfilter-edge:
+    driver: bridge
 
 volumes:
   contentfilter-postgres-data:
