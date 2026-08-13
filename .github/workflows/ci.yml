@@ -54,6 +54,60 @@ jobs:
           model-service/app/service.py
           model-service/app/main.py
 
+  docker:
+    name: Docker build and compose smoke test
+    runs-on: ubuntu-latest
+    needs: [java, model-evaluation]
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Builds contentfilter-api (root Dockerfile) and contentfilter-model
+      # (model-service/Dockerfile, which downloads the pinned model during
+      # build) exactly as compose.yaml defines them. This is the step that
+      # would have caught a broken build context or a Python error in the
+      # model-download stage before it reached a real deployment.
+      - name: Build both service images
+        run: docker compose build
+
+      - name: Start the stack
+        run: docker compose up -d
+
+      # Readiness only reports UP once the database is healthy, the model
+      # service has finished loading the pinned model, and the API's
+      # fastApiModel health indicator can reach it — so this is a real
+      # end-to-end check, not just "did the process start".
+      - name: Wait for the API to report ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/actuator/health/readiness; then
+              echo
+              echo "API is ready."
+              exit 0
+            fi
+            echo "Waiting for readiness... (${i}/60)"
+            sleep 10
+          done
+          echo "API never became ready within the time budget." >&2
+          exit 1
+
+      - name: Show container status
+        if: always()
+        run: docker compose ps
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down the stack
+        if: always()
+        run: docker compose down -v
+
   java:
     name: Java verification
     runs-on: ubuntu-latest
