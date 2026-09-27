@@ -43,6 +43,19 @@ annotated workbook. The system is split into three parts:
 - Solid unit/integration test coverage across the services above, plus
   operational contract tests.
 
+### V2 secure review (`v2` profile; see `docs/architecture/v2-review.md`)
+- Accounts with BCrypt hashes and `ADMIN`/`ANALYST` roles; login issues a
+  short-lived HS256 JWT; a bootstrap admin is created on an empty database.
+- `POST /api/v2/batches` runs the V1 pipeline and saves each review-required
+  result as a review case. Unflagged messages are never stored.
+- A reviewer queue with filters, and a one-time decision per case (confirm,
+  override, or dismiss) guarded by optimistic locking.
+- Append-only audit trail (actions and decisions), enforced by a DB trigger.
+- Integration-tested against real PostgreSQL via Testcontainers (skipped
+  locally without Docker, always run in CI).
+- Fixed: Boot 4 needs `spring-boot-starter-flyway`. With `flyway-core` alone,
+  the `v2` profile never ran migrations.
+
 ### Python model-service (Modules 4 & 5)
 - Versioned 240-message synthetic domain dataset (`v1-domain-synthetic`)
   with a dataset card and annotation guide.
@@ -117,8 +130,10 @@ production configuration.
 2. **Improve model quality** — evaluate further candidates, ensembling, or
    fine-tuning on the domain dataset now that the evaluation pipeline is
    validated end-to-end.
-3. **Manual-review workflow** — `MANUAL_REVIEW` currently exists only as a
-   policy outcome; there's no reviewer queue or UI to act on it yet.
+3. **Manual-review workflow** — backend done (V2 cases, decisions, audit).
+   Remaining: a reviewer UI (login, queue, case detail, decision form),
+   async upload jobs for large workbooks, and putting V1 endpoints behind
+   auth.
 4. **Frontend maturity** — inline per-message results (not just a workbook
    download), better error handling for edge cases, and replacing the
    remaining default Vite scaffolding.
@@ -127,8 +142,9 @@ production configuration.
    production config profiles, real secrets management (the Postgres
    password is currently a `compose.yaml` default, not a managed secret),
    and observability beyond correlation IDs (metrics, logging, tracing).
-6. **Auth & data handling** — authentication/authorization if this becomes
-   multi-user, plus a data-retention/privacy review for conversation data.
+6. **Auth & data handling** — V2 JWT auth and roles are done. Remaining:
+   login rate limiting, token revocation, account disable/password reset,
+   and a data-retention/privacy review for stored conversation data.
 7. **API documentation** — OpenAPI/docs for the Spring Boot API itself
    (currently only the model-service documents its API).
 8. **Broaden input support** — formats beyond `.xlsx` if needed (e.g. CSV).

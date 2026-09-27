@@ -1,0 +1,18 @@
+package com.example.contentfilter.controller;
+
+import java.util.List;
+import org.springframework.data.domain.Page;
+
+/** Stable JSON shape for paged V2 results, independent of Spring Data's Page internals. */
+public record PageResponse<T>(
+		List<T> content,
+		int page,
+		int size,
+		long totalElements,
+		int totalPages) {
+
+	public static <T> PageResponse<T> from(Page<T> page) {
+		return new PageResponse<>(page.getContent(), page.getNumber(), page.getSize(),
+				page.getTotalElements(), page.getTotalPages());
+	}
+}

@@ -96,6 +96,16 @@ jobs:
           echo "API never became ready within the time budget." >&2
           exit 1
 
+      # Proves the V2 path end to end: Flyway migrated the database, the
+      # bootstrap admin exists, and the API issues a signed access token.
+      - name: Log in as the bootstrap admin
+        run: |
+          curl -fsS -X POST http://localhost:8080/api/v2/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"admin@contentfilter.local","password":"dev-only-admin-password"}' \
+            | grep -q '"accessToken"'
+          echo "V2 login succeeded."
+
       - name: Show container status
         if: always()
         run: docker compose ps

@@ -9,9 +9,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -145,6 +148,72 @@ public class GlobalExceptionHandler {
 				request);
 	}
 
+	/** Failed V2 login; the message never reveals which part was wrong. */
+	@ExceptionHandler(InvalidCredentialsException.class)
+	public ResponseEntity<ProblemDetail> handleInvalidCredentials(
+			InvalidCredentialsException exception,
+			HttpServletRequest request) {
+		return problem(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", exception.getMessage(), request);
+	}
+
+	/** Missing, expired, or invalid bearer token (routed here by the security entry point). */
+	@ExceptionHandler(AuthenticationException.class)
+	public ResponseEntity<ProblemDetail> handleAuthentication(
+			AuthenticationException exception,
+			HttpServletRequest request) {
+		return problem(
+				HttpStatus.UNAUTHORIZED,
+				"UNAUTHENTICATED",
+				"A valid access token is required.",
+				request);
+	}
+
+	/** Authenticated, but the role does not allow this operation. */
+	@ExceptionHandler(AccessDeniedException.class)
+	public ResponseEntity<ProblemDetail> handleAccessDenied(
+			AccessDeniedException exception,
+			HttpServletRequest request) {
+		return problem(
+				HttpStatus.FORBIDDEN,
+				"ACCESS_DENIED",
+				"Your role does not allow this operation.",
+				request);
+	}
+
+	@ExceptionHandler(ResourceNotFoundException.class)
+	public ResponseEntity<ProblemDetail> handleNotFound(
+			ResourceNotFoundException exception,
+			HttpServletRequest request) {
+		return problem(HttpStatus.NOT_FOUND, "NOT_FOUND", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler(ConflictException.class)
+	public ResponseEntity<ProblemDetail> handleConflict(
+			ConflictException exception,
+			HttpServletRequest request) {
+		return problem(HttpStatus.CONFLICT, exception.errorCode(), exception.getMessage(), request);
+	}
+
+	/** Two reviewers decided the same case at once; the later commit loses. */
+	@ExceptionHandler(OptimisticLockingFailureException.class)
+	public ResponseEntity<ProblemDetail> handleOptimisticLocking(
+			OptimisticLockingFailureException exception,
+			HttpServletRequest request) {
+		return problem(
+				HttpStatus.CONFLICT,
+				"CONCURRENT_MODIFICATION",
+				"The resource was changed by someone else. Reload it and try again.",
+				request);
+	}
+
+	@ExceptionHandler(InvalidReviewDecisionException.class)
+	public ResponseEntity<ProblemDetail> handleInvalidReviewDecision(
+			InvalidReviewDecisionException exception,
+			HttpServletRequest request) {
+		return problem(
+				HttpStatus.BAD_REQUEST, "INVALID_REVIEW_DECISION", exception.getMessage(), request);
+	}
+
 	/** Converts unexpected failures to a safe response and logs the stack trace. */
 	@ExceptionHandler(Exception.class)
 	public ResponseEntity<ProblemDetail> handleUnexpected(
@@ -159,7 +228,7 @@ public class GlobalExceptionHandler {
 				request);
 	}
 
-	private ResponseEntity<ProblemDetail> problem(
+	static ResponseEntity<ProblemDetail> problem(
 			HttpStatus status,
 			String errorCode,
 			String detail,
@@ -178,7 +247,7 @@ public class GlobalExceptionHandler {
 		return ResponseEntity.status(status).body(problem);
 	}
 
-	private String correlationId(HttpServletRequest request) {
+	static String correlationId(HttpServletRequest request) {
 		Object value = request.getAttribute(CorrelationIdFilter.REQUEST_ATTRIBUTE);
 		return value instanceof String id ? id : "unavailable";
 	}

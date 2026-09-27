@@ -47,6 +47,11 @@ services:
       CONTENT_FILTER_DATABASE_URL: jdbc:postgresql://contentfilter-db:5432/contentfilter
       CONTENT_FILTER_DATABASE_USERNAME: contentfilter
       CONTENT_FILTER_DATABASE_PASSWORD: ${CONTENT_FILTER_DATABASE_PASSWORD:-contentfilter}
+      # V2 auth. The fallbacks below are for local development only; set real
+      # values in the environment for any shared or deployed stack.
+      CONTENT_FILTER_JWT_SECRET: ${CONTENT_FILTER_JWT_SECRET:-dev-only-jwt-secret-change-me-0123456789}
+      CONTENT_FILTER_BOOTSTRAP_ADMIN_EMAIL: ${CONTENT_FILTER_BOOTSTRAP_ADMIN_EMAIL:-admin@contentfilter.local}
+      CONTENT_FILTER_BOOTSTRAP_ADMIN_PASSWORD: ${CONTENT_FILTER_BOOTSTRAP_ADMIN_PASSWORD:-dev-only-admin-password}
       CONTENT_FILTER_MAX_FILE_SIZE: 5MB
       CONTENT_FILTER_MAX_SEQUENCES: "2000"
     depends_on:
