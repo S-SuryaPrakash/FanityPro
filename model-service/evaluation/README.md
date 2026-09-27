@@ -22,10 +22,15 @@ support and AI-assistant domain.
 - `baseline-thresholds.json` exists only to exercise the evaluation pipeline.
   Its values are not approved production thresholds.
 - `DOMAIN_SMOKE_REPORT.md` records an end-to-end MiniLM proof run on the expanded
-  corpus and the important failure modes it exposed.
-- Both candidates are rejected. Threat recall of 0.25, 7/8 benign identity
-  mentions falsely flagged, and all quoted-harm/self-directed negatives
-  flagged. Fine-tuning on the adjudicated dataset is recommended before
+  corpus (draft labels) and the important failure modes it exposed.
+- `ADJUDICATOR_REPORT.md` records the third-reviewer adjudication of the 28
+  Reviewer 1 / Reviewer 2 disagreements, finalizing the dataset's ground truth.
+- `ADJUDICATED_DOMAIN_REPORT.md` re-runs both eligible candidates against the
+  finalized `v1-domain-adjudicated.jsonl`. Both candidates are still rejected:
+  threat recall 0.25–0.31 (bar is 0.90), 7/8 benign identity mentions falsely
+  flagged, and all quoted-harm/self-directed negatives flagged. `toxic-bert`
+  outperforms MiniLM on this domain corpus but fails the same safety-critical
+  bars. Fine-tuning or a context-aware candidate is recommended before
   re-evaluation. No model is selected for production.
 
 ## Dataset lifecycle

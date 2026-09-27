@@ -93,12 +93,18 @@ annotated workbook. The system is split into three parts:
 
 ## Current model status (important caveat)
 
-The best candidate so far, `minuva/MiniLMv2-toxic-jigsaw`, scores macro F1
-0.578 on the untouched domain test split — but **threat recall is only
-0.25**, which is unacceptable for a safety-critical release, and
-general-toxicity has a high false-positive rate (0.646). **No model is
-approved for production**; the deterministic rule-based model remains the
-default in production configuration.
+The domain dataset has now been through the full three-step review process
+(Reviewer 1 → Reviewer 2 → independent adjudicator; see
+`model-service/evaluation/ADJUDICATOR_REPORT.md`), and both eligible
+candidates have been re-evaluated against the finalized ground truth (see
+`model-service/evaluation/ADJUDICATED_DOMAIN_REPORT.md`). The best candidate,
+`unitary/toxic-bert`, scores macro F1 0.631 — but **threat recall is only
+0.31** (MiniLM: 0.25), which is unacceptable for a safety-critical release;
+7/8 benign identity mentions are falsely flagged; and quoted-harm/self-directed
+messages are flagged 100% of the time. Re-evaluation against the adjudicated
+labels confirmed rather than changed this conclusion. **No model is approved
+for production**; the deterministic rule-based model remains the default in
+production configuration.
 
 ## Roadmap to a full-fledged product
 

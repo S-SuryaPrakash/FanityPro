@@ -11,6 +11,19 @@ This is a **working smoke and regression dataset**, not production ground truth.
 Every row remains `draft`; generated labels cannot replace independent human
 annotation and adjudication.
 
+## Review history
+
+As of 2026-08-17, `v1-domain-adjudicated.jsonl` has been through the full
+three-step process defined in `ANNOTATION_GUIDE.md`: Reviewer 1 labeled the
+dataset independently, Reviewer 2 labeled it independently and critiqued
+Reviewer 1's labels, and a third, independent adjudicator resolved the 28
+remaining `HARASSMENT_OR_INSULT` disagreements between them, then extended the
+same reasoning to 4 non-disputed sibling rows found inconsistent with the
+adjudicated result (see `ADJUDICATOR_REPORT.md`). The adjudicator role in this
+pass was filled by an AI agent, not a human reviewer, so the caveat above still
+applies in full: every row remains `draft`, and these labels cannot replace
+independent human annotation and adjudication before any production use.
+
 ## Composition
 
 | Property | Value |
