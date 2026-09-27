@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import './App.css'
+import { parseClassificationResults, categoryTone, type ClassificationResults } from './parseResults'
 
 type Status = 'idle' | 'uploading' | 'processing' | 'done' | 'error'
 
@@ -10,6 +11,7 @@ interface UploadState {
   error: string | null
   downloadUrl: string | null
   downloadFilename: string | null
+  results: ClassificationResults | null
 }
 
 const API_ENDPOINT = '/api/v1/files/classify'
@@ -22,18 +24,25 @@ export default function App() {
     error: null,
     downloadUrl: null,
     downloadFilename: null,
+    results: null,
   })
   const [dragOver, setDragOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const reset = useCallback(() => {
     if (state.downloadUrl) URL.revokeObjectURL(state.downloadUrl)
-    setState({ status: 'idle', file: null, progress: '', error: null, downloadUrl: null, downloadFilename: null })
+    setState({
+      status: 'idle', file: null, progress: '', error: null,
+      downloadUrl: null, downloadFilename: null, results: null,
+    })
   }, [state.downloadUrl])
 
   const classify = useCallback(async (file: File) => {
     if (state.downloadUrl) URL.revokeObjectURL(state.downloadUrl)
-    setState({ status: 'uploading', file, progress: 'Uploading…', error: null, downloadUrl: null, downloadFilename: null })
+    setState({
+      status: 'uploading', file, progress: 'Uploading…', error: null,
+      downloadUrl: null, downloadFilename: null, results: null,
+    })
 
     const formData = new FormData()
     formData.append('file', file)
@@ -58,8 +67,18 @@ export default function App() {
       const match = disposition.match(/filename\*?=(?:UTF-8'')?([^;\n]+)/i)
       const filename = match ? decodeURIComponent(match[1].replace(/"/g, '')) : 'classified.xlsx'
 
+      // Parsed from the same workbook the download link points to — if this fails (an
+      // unexpected sheet layout, a corrupt response), the download link is untouched and the
+      // user can still get their result; only the inline summary is best-effort.
+      let results: ClassificationResults | null = null
+      try {
+        results = parseClassificationResults(await blob.arrayBuffer())
+      } catch (parseError) {
+        console.warn('Could not render inline results; download is still available.', parseError)
+      }
+
       const downloadUrl = URL.createObjectURL(blob)
-      setState(prev => ({ ...prev, status: 'done', downloadUrl, downloadFilename: filename, progress: '' }))
+      setState(prev => ({ ...prev, status: 'done', downloadUrl, downloadFilename: filename, progress: '', results }))
     } catch (err) {
       setState(prev => ({
         ...prev,
@@ -161,6 +180,10 @@ export default function App() {
         )}
       </div>
 
+      {state.status === 'done' && state.results && (
+        <ResultsPanel results={state.results} />
+      )}
+
       {state.status === 'done' && state.downloadUrl && (
         <div className="actions">
           <a
@@ -178,5 +201,69 @@ export default function App() {
         <p>Content Filter v1 &middot; Messages are classified locally and never stored</p>
       </footer>
     </div>
+  )
+}
+
+function ResultsPanel({ results }: { results: ClassificationResults }) {
+  const { totalMessages, reviewRequiredCount, categories, reviewQueue } = results
+
+  return (
+    <section className="results" aria-label="Classification results">
+      <div className="results__stats">
+        <div className="stat">
+          <span className="stat__value">{totalMessages}</span>
+          <span className="stat__label">Messages classified</span>
+        </div>
+        <div className={`stat ${reviewRequiredCount > 0 ? 'stat--warning' : 'stat--success'}`}>
+          <span className="stat__value">{reviewRequiredCount}</span>
+          <span className="stat__label">Need manual review</span>
+        </div>
+      </div>
+
+      {categories.length > 0 && (
+        <div className="category-badges">
+          {categories.map(c => (
+            <span key={c.category} className={`category-badge category-badge--${categoryTone(c.category)}`}>
+              {c.category} <strong>{c.total}</strong>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {reviewQueue.length === 0 ? (
+        <p className="results__empty">No messages require manual review.</p>
+      ) : (
+        <div className="review-table-wrapper">
+          <table className="review-table">
+            <thead>
+              <tr>
+                <th scope="col">#</th>
+                <th scope="col">Category</th>
+                <th scope="col">Severity</th>
+                <th scope="col">Confidence</th>
+                <th scope="col">Message</th>
+                <th scope="col">Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reviewQueue.map(item => (
+                <tr key={item.priority}>
+                  <td>{item.priority}</td>
+                  <td>
+                    <span className={`category-badge category-badge--${categoryTone(item.primaryCategory)}`}>
+                      {item.primaryCategory}
+                    </span>
+                  </td>
+                  <td>{item.severity}</td>
+                  <td>{(item.confidence * 100).toFixed(0)}%</td>
+                  <td className="review-table__text">{item.text}</td>
+                  <td className="review-table__text">{item.reviewReason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   )
 }
